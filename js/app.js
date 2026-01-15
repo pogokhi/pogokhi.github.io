@@ -11,6 +11,7 @@ const App = {
         currentYear: new Date().getFullYear(),
         viewMode: 'calendar', // 'calendar', 'list'
         departments: [], // Cached Departments
+        templates: {}, // Cached Modal Templates
     },
 
     // Constants
@@ -287,7 +288,7 @@ const App = {
         const btnAddSchedule = document.getElementById('btn-add-schedule');
 
         if (btnAddSchedule) {
-            const canAdd = this.state.role === 'admin' || this.state.role === 'head_teacher';
+            const canAdd = this.state.role === 'admin' || this.state.role === 'head_teacher' || this.state.role === 'head';
 
             if (canAdd) {
                 btnAddSchedule.classList.remove('hidden');
@@ -1991,17 +1992,7 @@ const App = {
             return [];
         }
 
-        // Map to internal format if needed
-        const mapped = results.map(d => ({
-            id: d.id,
-            dept_name: d.dept_name,
-            dept_color: d.dept_color,
-            is_special: false // We are not handling special depts via this table yet
-        }));
-
-        // Fallback: If no year-specific depts, maybe show global ones?
-        // For now, just return what we find.
-        return mapped;
+        return results || [];
     },
 
     fetchSchedules: async function () {
@@ -2199,8 +2190,8 @@ const App = {
             this.navigate('login');
             return;
         }
-
-        const canEdit = this.state.role === 'admin' || this.state.role === 'head_teacher';
+        
+        const canEdit = this.state.role === 'admin' || this.state.role === 'head_teacher' || this.state.role === 'head';
         if (!canEdit) {
             alert('일정 등록/수정 권한이 없습니다.');
             return;
@@ -2209,12 +2200,16 @@ const App = {
         // 2. Load Modal Template
         const modalContainer = document.getElementById('modal-container');
         try {
-            const response = await fetch('pages/modal-schedule.html');
-            modalContainer.innerHTML = await response.text();
+            if (!this.state.templates['schedule']) {
+                const response = await fetch('pages/modal-schedule.html');
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                this.state.templates['schedule'] = await response.text();
+            }
+            modalContainer.innerHTML = this.state.templates['schedule'];
             modalContainer.classList.remove('invisible');
         } catch (e) {
-            console.error("Failed to load modal", e);
-            alert('오류가 발생했습니다.');
+            console.error("Failed to load schedule modal", e);
+            alert('모달을 불러오는 중 오류가 발생했습니다. 서버 연결을 확인해 주세요.\n(' + e.message + ')');
             return;
         }
 
@@ -2445,11 +2440,16 @@ const App = {
     openPrintModal: async function () {
         const modalContainer = document.getElementById('modal-container');
         try {
-            const response = await fetch('pages/modal-print.html');
-            modalContainer.innerHTML = await response.text();
+            if (!this.state.templates['print']) {
+                const response = await fetch('pages/modal-print.html');
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                this.state.templates['print'] = await response.text();
+            }
+            modalContainer.innerHTML = this.state.templates['print'];
             modalContainer.classList.remove('invisible');
         } catch (e) {
             console.error("Failed to load print modal", e);
+            alert('인쇄 설정을 불러올 수 없습니다. (' + e.message + ')');
             return;
         }
 
@@ -2511,11 +2511,16 @@ const App = {
     openExcelModal: async function () {
         const modalContainer = document.getElementById('modal-container');
         try {
-            const response = await fetch('pages/modal-excel.html');
-            modalContainer.innerHTML = await response.text();
+            if (!this.state.templates['excel']) {
+                const response = await fetch('pages/modal-excel.html');
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                this.state.templates['excel'] = await response.text();
+            }
+            modalContainer.innerHTML = this.state.templates['excel'];
             modalContainer.classList.remove('invisible');
         } catch (e) {
             console.error("Failed to load excel modal", e);
+            alert('엑셀 업로드 창을 불러올 수 없습니다. (' + e.message + ')');
             return;
         }
 
@@ -2531,6 +2536,17 @@ const App = {
         let parsedBasic = [];
         let parsedNormal = [];
         let excelCount = 0;
+        let yearDepartments = [];
+
+        // Function to refresh departments for selected year
+        const refreshYearDepts = async () => {
+             const selectedYear = parseInt(yearSelect.value);
+             yearDepartments = await this.fetchDepartments(selectedYear);
+             console.log(`Loaded ${yearDepartments.length} departments for year ${selectedYear}`);
+        };
+
+        // Initial fetch
+        await refreshYearDepts();
 
         // Populate Year Options
         const currentYear = this.state.currentYear || new Date().getFullYear();
@@ -2633,7 +2649,7 @@ const App = {
                     '3학년 2학기 2차지필': { code: 'EXAM_3_2_2', type: 'exam' }
                 };
 
-                const depts = this.state.departments; 
+                const depts = yearDepartments; 
                 parsedBasic = [];
                 parsedNormal = [];
                 let errors = [];
@@ -2710,8 +2726,18 @@ const App = {
                         }
                         excelCount++;
                     } else if (typeRaw === '일반') {
-                         // Match Dept
-                        const dept = depts.find(d => d.dept_name === deptName) || depts[0]; 
+                         // Match Dept by Name (NFC normalizable)
+                        const normalize = (s) => (s || '').normalize('NFC').replace(/\s+/g, '');
+                        const targetNorm = normalize(deptName);
+                        
+                        const dept = depts.find(d => normalize(d.dept_name) === targetNorm); 
+                        
+                        if (deptName && !dept) {
+                             errors.push(`${idx+2}행: 부서명 오류 ('${deptName}'은(는) ${selectedYear}학년도에 존재하지 않습니다.)`);
+                        }
+                        
+                        // Use found dept or fallback to first one if name was provided but not found
+                        const finalDept = dept || depts[0] || { id: null };
 
                         // Map Visibility
                         let visibility = 'internal';
@@ -2723,7 +2749,7 @@ const App = {
                             start_date: start,
                             end_date: end || start,
                             description: desc || '',
-                            dept_id: dept.id,
+                            dept_id: finalDept.id,
                             visibility,
                             author_id: this.state.user.id,
                             is_printable: true
@@ -2888,7 +2914,8 @@ const App = {
             reader.readAsArrayBuffer(file);
         };
         
-        yearSelect.onchange = () => {
+        yearSelect.onchange = async () => {
+             await refreshYearDepts();
              if(fileInput.files.length > 0) {
                  fileInput.dispatchEvent(new Event('change'));
              }
@@ -2947,54 +2974,6 @@ const App = {
         };
     },
 
-    // --- Logging System ---
-
-    fetchDepartments: async function () {
-        const { data, error } = await window.SupabaseClient.supabase
-            .from('departments')
-            .select('*')
-            .order('sort_order', { ascending: true });
-            
-        if (error) {
-            console.error("fetchDepartments Error:", error);
-            return [];
-        }
-        return data || [];
-    },
-
-    logAction: async function (action, table, targetId, details) {
-        if (!this.state.user) return;
-
-        // Fire and forget
-        window.SupabaseClient.supabase.from('audit_logs').insert([{
-            user_id: this.state.user.id,
-            action_type: action,
-            target_table: table,
-            target_id: targetId,
-            changes: JSON.stringify(details)
-        }]).then(({ error }) => {
-            if (error) console.error("Audit Log Error:", error);
-        });
-    },
-
-    logError: async function (msg, url, line, col, errorObj) {
-        const errDetails = {
-            msg: msg,
-            url: url,
-            line: line,
-            col: col,
-            stack: errorObj?.stack
-        };
-        console.error("Capturing Client Error:", errDetails);
-
-        window.SupabaseClient.supabase.from('error_logs').insert([{
-            error_message: msg,
-            stack_trace: JSON.stringify(errDetails),
-            user_id: this.state.user?.id || null // Log user if known
-        }]).then(({ error }) => {
-            if (error) console.error("Failed to log error to DB:", error);
-        });
-    },
 
     bindCalendarSearch: function() {
         const searchInput = document.getElementById('search-schedule');
@@ -3188,8 +3167,13 @@ const App = {
                 group.events.forEach(ev => {
                     const evDiv = document.createElement('div');
                     evDiv.className = "cursor-pointer hover:bg-gray-100 rounded px-1 py-0.5 break-words";
-                    evDiv.textContent = ev.title; 
-                    evDiv.title = ev.title;
+                    
+                    const displayTitle = ev.extendedProps.description 
+                        ? `${ev.title}(${ev.extendedProps.description})` 
+                        : ev.title;
+                    
+                    evDiv.textContent = displayTitle; 
+                    evDiv.title = displayTitle;
                     evDiv.onclick = (e) => {
                         e.stopPropagation();
                         this.openScheduleModal(ev.id);
@@ -3202,18 +3186,7 @@ const App = {
         return { domNodes: [container] };
     },
 
-    fetchDepartments: async function () {
-        const { data, error } = await window.SupabaseClient.supabase
-            .from('departments')
-            .select('*')
-            .order('sort_order', { ascending: true });
-            
-        if (error) {
-            console.error("fetchDepartments Error:", error);
-            return [];
-        }
-        return data || [];
-    },
+    // --- Logging System ---
 
     logAction: async function (action, table, targetId, details) {
         if (!this.state.user) return;
