@@ -26,15 +26,29 @@ body {
     /* gray-200 */
     --fc-button-active-border-color: #6b7280;
     /* gray-500 */
-    --fc-today-bg-color: #faf5ff;
-    /* purple-50 */
+    --fc-today-bg-color: #f5f3ff;
+    /* purple-100 (slightly more visible) */
+}
+
+/* Today Priority: Ensure today's color is always top priority */
+.fc .fc-day-today {
+    background-color: var(--fc-today-bg-color) !important;
+    z-index: 2 !important; /* Above other day backgrounds */
+}
+
+/* Hide background events background color on today to let priority color show */
+.fc-day-today .holiday-bg-event,
+.fc-day-today .vacation-bg-event {
+    background-color: transparent !important;
 }
 
 /* Apply rounded corners & shadow ONLY to the grid (excluding toolbar) */
 .fc .fc-scrollgrid {
     border-radius: 12px !important;
     overflow: hidden !important;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    box-shadow:
+        0 4px 6px -1px rgba(0, 0, 0, 0.1),
+        0 2px 4px -1px rgba(0, 0, 0, 0.06);
     background: white;
     border: 1px solid #e5e7eb; /* Ensure border is visible */
 }
@@ -74,8 +88,17 @@ body {
 .holiday-bg-event {
     background-color: #fef2f2 !important;
     /* red-50 */
-    border: 1px solid #fee2e2 !important; 
+    border: 1px solid #fee2e2 !important;
     color: transparent !important; /* Hide text in the middle */
+    opacity: 1 !important;
+    pointer-events: none;
+}
+
+/* Vacation Periods (Extremely light pink) */
+.vacation-bg-event {
+    background-color: #fffcfc !important; /* Even lighter pink */
+    border: 1px solid #fff9f9 !important;
+    color: transparent !important;
     opacity: 1 !important;
     pointer-events: none;
 }
@@ -90,7 +113,7 @@ body {
 /* Date Number Font Size & Weight */
 .fc .fc-daygrid-day-number {
     font-size: 10px !important;
-    padding: 2px 4px !important; 
+    padding: 2px 4px !important;
     font-weight: 800 !important; /* Extra Bold */
     color: #1f2937; /* gray-800 default */
 }
@@ -102,8 +125,8 @@ body {
     color: #dc2626 !important; /* text-red-600 (darker red) */
 }
 
-/* Holiday Name (injected via JS) */
-.holiday-name {
+/* Holiday Name (injected via JS for Calendar top) */
+.fc-daygrid-day-top .holiday-name {
     font-size: 8px !important;
     color: #374151; /* text-gray-700 */
     font-weight: 700 !important;
@@ -115,11 +138,31 @@ body {
 /* Ensure day top flex alignment */
 .fc-daygrid-day-top {
     flex-direction: row !important;
-    justify-content: flex-end
-        !important; /* Put everything to right, but Since we order [Name] [Number], Name is left of Number */
+    justify-content: flex-start !important; /* Allow internal containers to determine alignment */
     align-items: center !important;
     position: relative !important;
     z-index: 5 !important; /* Ensure it's above background events */
+}
+
+/* Triangle indicator for days in the current month */
+.fc-daygrid-day:not(.fc-day-other) .fc-daygrid-day-top::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 10px 10px 0 0;
+    border-color: #6b7280 transparent transparent transparent; /* Darker medium gray for workdays */
+    z-index: 10;
+}
+
+/* Red triangle for Sat/Sun/Holidays (only in current month) */
+.fc-day-sun:not(.fc-day-other) .fc-daygrid-day-top::before,
+.fc-day-sat:not(.fc-day-other) .fc-daygrid-day-top::before,
+.is-holiday:not(.fc-day-other) .fc-daygrid-day-top::before {
+    border-top-color: #dc2626 !important;
 }
 
 /* Ensure background events stay below */

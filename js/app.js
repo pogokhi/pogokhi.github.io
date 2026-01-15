@@ -33,6 +33,65 @@ const App = {
         "09-16": "세계 오존층 보호의 날",
     },
 
+    // --- Shared Date Logic (Holiday Aware & Timezone Safe) ---
+    parseLocal: function(s) {
+        if(!s) return null;
+        const parts = s.split('-').map(Number);
+        return new Date(parts[0], parts[1] - 1, parts[2]);
+    },
+
+    formatLocal: function(d) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    },
+
+    isSchoolDay: function(d, parsedHolidays = null) {
+        const day = d.getDay(); // Local day (0-6)
+        if (day === 0 || day === 6) return false; // Weekend
+        
+        const dStr = this.formatLocal(d);
+        
+        // Priority 1: Check passed list (e.g. from Excel parsing)
+        if (parsedHolidays) {
+            const isParsed = parsedHolidays.some(p => p.is_holiday && p.start_date <= dStr && p.end_date >= dStr);
+            if(isParsed) return false;
+        }
+
+        // Priority 2: Check App State (Admin View)
+        // Fixed Holidays
+        if (this.currentFixedHolidays && this.currentFixedHolidays[dStr]) return false;
+        // Variable Holidays
+        if (this.currentVariableHolidays && this.currentVariableHolidays.some(h => h.date === dStr)) return false;
+
+        return true;
+    },
+
+    findPrevSchoolDay: function(startDateStr, parsedHolidays = null) {
+        let d = this.parseLocal(startDateStr);
+        d.setDate(d.getDate() - 1); 
+        let safety = 0;
+        while (safety < 30) {
+            if (this.isSchoolDay(d, parsedHolidays)) return this.formatLocal(d);
+            d.setDate(d.getDate() - 1);
+            safety++;
+        }
+        return startDateStr; 
+    },
+
+    findNextSchoolDay: function(endDateStr, parsedHolidays = null) {
+        let d = this.parseLocal(endDateStr);
+        d.setDate(d.getDate() + 1); 
+        let safety = 0;
+        while (safety < 30) {
+            if (this.isSchoolDay(d, parsedHolidays)) return this.formatLocal(d);
+            d.setDate(d.getDate() + 1);
+            safety++;
+        }
+        return endDateStr; 
+    },
+
     // Initialization
     init: async function () {
         console.log("GOELink Initializing...");
@@ -505,14 +564,20 @@ const App = {
              }
         };
         
+        // Expose for external calls (e.g. from Excel Modal)
+        this.refreshAdminView = loadAndPopulate;
+        
         await loadAndPopulate(); // Initial load
         
-        // Academic Year Change Listener
-        if(yearSelect) {
-            yearSelect.addEventListener('change', async (e) => {
-                const newYear = parseInt(e.target.value);
-                await loadAndPopulate(newYear);
-            });
+        // Academic Year Change Listener (Manual Confirm)
+        const btnChangeYear = document.getElementById('btn-change-year');
+        if(btnChangeYear && yearSelect) {
+            btnChangeYear.onclick = async () => {
+                const newYear = parseInt(yearSelect.value);
+                if(confirm(`${newYear}학년도로 전환하시겠습니까?\n저장하지 않은 내용은 사라질 수 있습니다.`)) {
+                    await loadAndPopulate(newYear);
+                }
+            };
         }
         
         // School Level Sync (KR -> EN)
@@ -541,35 +606,43 @@ const App = {
                   if(val) krLevelSelect.value = val;
              });
         }
-        // Date Cascading Listeners
+        
+        // --- Shared Date Logic (Holiday Aware) ---
+        // Moved to App methods (this.parseLocal, etc.)
+
+        // Date Cascading Listeners (Updated to use Smart Logic)
         document.getElementById('sched-summer-start')?.addEventListener('change', (e) => {
-            setVal('sched-summer-start-ceremony', addDays(e.target.value, -1));
+            setVal('sched-summer-start-ceremony', this.findPrevSchoolDay(e.target.value));
         });
         document.getElementById('sched-summer-end')?.addEventListener('change', (e) => {
-            setVal('sched-sem2-start', addDays(e.target.value, 1));
+            setVal('sched-sem2-start', this.findNextSchoolDay(e.target.value));
         });
         document.getElementById('sched-winter-start')?.addEventListener('change', (e) => {
-            setVal('sched-winter-start-ceremony', addDays(e.target.value, -1));
+            setVal('sched-winter-start-ceremony', this.findPrevSchoolDay(e.target.value));
         });
         document.getElementById('sched-winter-end')?.addEventListener('change', (e) => {
             const val = e.target.value;
             if(!val) return;
-            const d = new Date(val);
-            const lastFeb = new Date(d.getFullYear(), 2, 0);
-            if(formatDate(d) === formatDate(lastFeb)) {
-                setVal('sched-spring-sem-start', '');
+            // Special check for Spring Sem Start
+            const nextDay = this.findNextSchoolDay(val);
+            const nDate = this.parseLocal(nextDay);
+            
+            // If next school day is March, it's Term 1 Start, not Spring Sem Start
+            if (nDate.getMonth() === 2) {
+                 setVal('sched-spring-sem-start', '');
             } else {
-                setVal('sched-spring-sem-start', addDays(val, 1));
+                 setVal('sched-spring-sem-start', nextDay);
             }
         });
         document.getElementById('sched-spring-start')?.addEventListener('change', (e) => {
             const val = e.target.value;
-            setVal('sched-spring-start-ceremony', addDays(val, -1));
+            setVal('sched-spring-start-ceremony', this.findPrevSchoolDay(val));
             
             if(val) {
-                const d = new Date(val);
-                const lastFeb = new Date(d.getFullYear(), 2, 0);
-                setVal('sched-spring-end', formatDate(lastFeb));
+                const d = this.parseLocal(val);
+                // Default Spring Vac End to Last day of Feb
+                const lastFeb = new Date(d.getFullYear(), 2, 0); 
+                setVal('sched-spring-end', this.formatLocal(lastFeb));
             }
         });
         
@@ -650,6 +723,9 @@ const App = {
          if(yearSelect) {
              const y = targetYear || data.academic_year || new Date().getFullYear();
              this.state.currentYear = y;
+             
+             // Refresh Departments for this year to avoid duplicates/stale data
+             this.state.departments = await this.fetchDepartments(y);
          }
 
          // --- Helper for setting values ---
@@ -678,6 +754,12 @@ const App = {
              
              const genDepts = allDepts
                  .filter(d => !specNames.includes(d.dept_name))
+                 // Deduplicate by Name (Fix for dirty DB data)
+                 .filter((d, index, self) => 
+                     index === self.findIndex((t) => (
+                         t.dept_name === d.dept_name
+                     ))
+                 )
                  .map(d => ({
                      name: d.dept_name,
                      nickname: d.dept_short,
@@ -884,22 +966,46 @@ const App = {
 
          // 2. Identify Variables (In DB but not in Standard)
          const variableRows = schedules.filter(r => r.type === 'holiday');
+         const ayStart = `${targetY}-03-01`;
+         const ayEnd = `${parseInt(targetY) + 1}-02-29`;
+
          variableRows.forEach(r => {
+             // Range check: Only items belonging to THIS academic year calendar (Mar to Feb)
+             if (r.start_date < ayStart || r.start_date > ayEnd) return;
+
              // Check if this date/name exists in standard
-             // Note: standardFixed is { 'YYYY-MM-DD': 'Name' }
              const standardName = standardFixed[r.start_date];
              if (!standardName) {
-                 // True variable holiday (or manually added)
                  this.currentVariableHolidays.push({ date: r.start_date, name: r.name });
              }
          });
          this.currentVariableHolidays.sort((a,b) => a.date.localeCompare(b.date));
          this.renderVariableHolidays(this.currentVariableHolidays);
+ 
+         // --- Auto-Fill Term 1 Start if Missing (Dynamic) ---
+         // Using targetY + Holidays (Fixed+Variable) we just loaded/calc'd
+         const t1Code = schedules.find(r => r.code === 'TERM1_START');
+         if (!t1Code) {
+             const y = parseInt(targetY);
+             // Start search from March 1st (Local)
+             let d = new Date(y, 2, 1); // March 1st
+             
+             let safety = 0;
+             while(safety < 31) {
+                 // isSchoolDay uses this.currentFixedHolidays / this.currentVariableHolidays by default
+                 if(this.isSchoolDay(d)) break; 
+                 d.setDate(d.getDate() + 1);
+                 safety++;
+             }
+             const t1Start = this.formatLocal(d);
+             setVal('sched-sem1-start', t1Start);
+         }
 
          // 3. Major Events (No Code, Type=event)
          // Filter out Ceremonies if they have codes (which they do)
          const majorRows = schedules.filter(r => r.type === 'event' && !r.code);
          majorRows.forEach(r => {
+             if (r.start_date < ayStart || r.start_date > ayEnd) return;
              this.currentMajorEvents.push({ start: r.start_date, end: r.end_date, name: r.name });
          });
          this.currentMajorEvents.sort((a,b) => a.start.localeCompare(b.start));
@@ -972,7 +1078,9 @@ const App = {
 
         // Lunar New Year & Chuseok with Eve/After days
         const addLunarSpan = (lmmdd, mainName) => {
-            const mainSolar = this.getSolarFromLunar(year, lmmdd);
+            // Academic year start is March. Lunar New Year (0101) always falls in Jan/Feb of the NEXT calendar year.
+            const targetCalYear = (lmmdd === "0101") ? year + 1 : year;
+            const mainSolar = this.getSolarFromLunar(targetCalYear, lmmdd);
             if(mainSolar) {
                 const eve = this.adjustSolarDate(mainSolar, -1);
                 const after = this.adjustSolarDate(mainSolar, 1);
@@ -1010,8 +1118,10 @@ const App = {
 
                 if (type === "weekend" && (dayNum === 0 || dayNum === 6)) needsSub = true;
                 else if (type === "sunday" && dayNum === 0) needsSub = true;
-                else if (type === "all" && (dayNum === 0 || dayNum === 6)) needsSub = true; 
-                // Note: overlap with other holiday check would need more complex multi-pass, but Sat/Sun covers most.
+                else if (type === "all") {
+                    // Weekend OR Overlap with another holiday (names.length > 1)
+                    if (dayNum === 0 || dayNum === 6 || names.length > 1) needsSub = true;
+                }
 
                 if (needsSub) {
                     let subDate = this.adjustSolarDate(dateStr, 1);
@@ -1050,15 +1160,15 @@ const App = {
 
             if (isEditing) {
                 // Remove bg-white, border, shadow when editing as requested
-                div.className = "flex items-center justify-between px-1 h-[40px] mb-1 group transition-all";
+                div.className = "flex items-center justify-between px-1 mb-1 group transition-all";
                 div.innerHTML = `
-                    <div class="flex items-center gap-1 w-full overflow-hidden">
+                    <div class="flex items-center gap-2 w-full overflow-hidden">
                         <input type="date" value="${item.date || ''}" max="2099-12-31"
-                            class="holiday-date border border-gray-300 rounded px-2 h-[32px] text-sm w-[140px] focus:ring-2 focus:ring-purple-400" />
+                            class="holiday-date border rounded-lg px-3 py-2 text-sm w-[150px] focus:ring-2 focus:ring-purple-200 transition-colors" />
                         <input type="text" value="${item.name || ''}" placeholder="명칭" 
-                            class="holiday-name border border-gray-300 rounded px-2 h-[32px] text-sm flex-grow focus:ring-2 focus:ring-purple-400" />
+                            class="holiday-name flex-grow border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-200 min-w-0 transition-colors" />
                         <button type="button" class="btn-del-hol text-red-300 hover:text-red-500 flex items-center shrink-0 ml-1">
-                            <span class="material-symbols-outlined text-lg">delete</span>
+                            <span class="material-symbols-outlined text-xl">delete</span>
                         </button>
                     </div>
                 `;
@@ -1151,20 +1261,24 @@ const App = {
             const isEditing = !item.start || !item.name || item.isEditing;
 
             if (isEditing) {
-                div.className = "flex items-center gap-1 w-full p-1 border border-gray-200 rounded mb-1 bg-gray-50 h-[40px]";
+                div.className = "flex items-center gap-1 w-full p-1 mb-1 bg-gray-50";
                 div.innerHTML = `
-                    <input type="date" value="${item.start || ''}" max="2099-12-31"
-                        class="event-start border border-gray-300 rounded px-1 h-[30px] text-xs w-[105px] focus:ring-1 focus:ring-blue-400" />
-                    <span class="text-gray-400 text-xs">~</span>
-                    <input type="date" value="${item.end || ''}" max="2099-12-31"
-                        class="event-end border border-gray-300 rounded px-1 h-[30px] text-xs w-[105px] focus:ring-1 focus:ring-blue-400" />
+                    <div class="flex items-center gap-2 w-full">
+                         <div class="flex items-center gap-1">
+                            <input type="date" value="${item.start || ''}" max="2099-12-31"
+                                class="event-start border rounded-lg px-3 py-2 text-sm w-[140px] focus:ring-2 focus:ring-blue-200 transition-colors" />
+                            <span class="text-gray-400 text-sm">~</span>
+                            <input type="date" value="${item.end || ''}" max="2099-12-31"
+                                class="event-end border rounded-lg px-3 py-2 text-sm w-[140px] focus:ring-2 focus:ring-blue-200 transition-colors" />
+                         </div>
                     
-                    <input type="text" value="${item.name || ''}" placeholder="행사명" 
-                        class="event-name flex-grow border border-gray-300 rounded px-2 h-[30px] text-xs focus:ring-1 focus:ring-blue-400 min-w-0" />
-                    
-                    <button type="button" class="btn-del-major text-red-400 hover:text-red-600 shrink-0">
-                        <span class="material-symbols-outlined text-lg">delete</span>
-                    </button>
+                        <input type="text" value="${item.name || ''}" placeholder="행사명" 
+                            class="event-name flex-grow border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 min-w-0 transition-colors" />
+                        
+                        <button type="button" class="btn-del-major text-red-400 hover:text-red-600 shrink-0 ml-1">
+                            <span class="material-symbols-outlined text-xl">delete</span>
+                        </button>
+                    </div>
                 `;
             } else {
                 div.className = "flex items-center justify-between bg-white px-3 h-[40px] rounded border border-gray-100 shadow-sm mb-1 group hover:bg-blue-50 transition-all cursor-pointer";
@@ -1267,22 +1381,15 @@ const App = {
         this.currentMajorEvents = newList;
     },
 
-    getSolarFromLunar: function(academicYear, mmdd) {
+    getSolarFromLunar: function(targetYear, mmdd) {
         if(!window.KoreanLunarCalendar || !mmdd || mmdd.length !== 4) return null;
         try {
             const mm = parseInt(mmdd.substring(0, 2));
             const dd = parseInt(mmdd.substring(2, 4));
-            
-            const baseYear = parseInt(academicYear);
-            const targetYear = (mm <= 5) ? baseYear + 1 : baseYear; // Feb(Jan-Lunar) or Buddha's Birthday(late lunar)
-            // Wait, Buddha's Birthday (0408 Lunar) usually falls in May/June of the SAME year.
-            // Lunar New Year (0101 Lunar) usually falls in Jan/Feb of the NEXT calendar year.
-            
-            let finalTargetYear = baseYear;
-            if (mm <= 2) finalTargetYear = baseYear + 1; // 1, 2 lunar is always next calendar year for academic start in March
+            const y = parseInt(targetYear);
             
             const converter = new window.KoreanLunarCalendar();
-            converter.setLunarDate(finalTargetYear, mm, dd, false);
+            converter.setLunarDate(y, mm, dd, false);
             const solar = converter.getSolarCalendar();
             
             if (!solar.year || !solar.month || !solar.day) return null;
@@ -1601,16 +1708,28 @@ const App = {
             }
 
             alert('학교 정보가 성공적으로 저장되었습니다.');
-            location.reload();
+            // Reload the view with the currently selected year (don't force reload page)
+            if (this.refreshAdminView) {
+                await this.refreshAdminView(academicYear);
+            } else {
+                location.reload(); // Fallback
+            }
+            
+            if(btnSave) {
+                btnSave.disabled = false;
+                btnSave.innerHTML = originalBtnText;
+            }
 
         } catch (err) {
             console.error(err);
             alert('저장 실패: ' + (err.message || '알 수 없는 오류'));
+            
             if(btnSave) {
                 btnSave.disabled = false;
                 btnSave.innerHTML = originalBtnText;
             }
         }
+
     },
 
     updateBrand: function(schoolNameKR, schoolNameEN) {
@@ -1650,7 +1769,7 @@ const App = {
                 listContainer.innerHTML = users.map(u => `
                     <div class="flex items-center justify-between p-2 border rounded hover:bg-gray-50">
                         <div>
-                            <div class="font-bold text-sm text-gray-800">${u.email}</div>
+                            <div class="font-bold text-sm text-gray-800">${u.email.split('@')[0]}</div>
                             <div class="text-xs text-gray-500">최근 접속: ${new Date(u.last_login).toLocaleDateString()}</div>
                         </div>
                         <div class="flex items-center gap-2">
@@ -1740,139 +1859,16 @@ const App = {
         const calendarEl = document.getElementById('calendar');
         if (!calendarEl) return;
 
-        // 1. Fetch Metadata (Settings, Departments)
-        const [settings, departments] = await Promise.all([
-            this.fetchSettings(),
-            this.fetchDepartments()
-        ]);
+        // 1. Initialize State Container
+        this.state.calendarData = {
+            holidayMap: {},
+            redDayMap: {},
+            scheduleMap: {},
+            backgroundEvents: [],
+            departments: []
+        };
 
-        this.state.departments = departments;
-        // Sidebar/Filters removed as per user request
-        
-        // 2. Fetch Events (Schedules)
-        const schedules = await this.fetchSchedules();
-        this.state.schedules = schedules; // Cache for search
-
-        // 3. Prepare Events for FullCalendar
-        const allEvents = this.transformEvents(schedules, settings, departments, settings.basic_schedules);
-        
-        // Split into Background (Holiday) and Foreground (Schedule)
-        const backgroundEvents = [];
-        const scheduleMap = {}; // { 'YYYY-MM-DD': { deptId: { info: deptObj, events: [eventObj] } } }
-
-        // Build Holiday Map for Cell Rendering (Title injection)
-        const holidayMap = {};
-        const redDayMap = {}; // Track Real Holidays
-
-        allEvents.forEach(e => {
-            if (e.display === 'background' || e.display === 'block') { // Holidays & Env Days
-                // For holidays, we keep using them as background events in FullCalendar 
-                // to handle the red shading.
-                if (e.display === 'background') {
-                    backgroundEvents.push(e);
-                }
-                
-                // Add to holidayMap for top-left labels
-                // Check if it's a holiday or special event type
-                if (e.className.includes('holiday-bg-event') || e.className.includes('event-major-text') || e.className.includes('event-env-text') || e.className.includes('event-exam-text')) {
-                     const dateKey = e.start; 
-                     if (!holidayMap[dateKey]) holidayMap[dateKey] = [];
-                     
-                     const label = e.extendedProps?.label || e.title;
-                     if (label && !holidayMap[dateKey].includes(label)) {
-                         holidayMap[dateKey].push(label);
-                     }
-                     
-                     // Identify Real Holidays
-                     if (e.className.includes('holiday-bg-event')) {
-                         redDayMap[dateKey] = true;
-                     }
-                }
-
-            } else {
-                // Regular Schedule
-                // Group by Date -> Dept
-                let current = new Date(e.start);
-                const end = e.end ? new Date(e.end) : new Date(e.start);
-                
-                // Loop through days (simple handling for V1, assuming reasonable ranges)
-                let daysCount = 0;
-                while (current < end || (current.getTime() === end.getTime() && !e.end)) {
-                    if (daysCount > 365) break; 
-                    
-                    const year = current.getFullYear();
-                    const month = String(current.getMonth() + 1).padStart(2, '0');
-                    const day = String(current.getDate()).padStart(2, '0');
-                    const dKey = `${year}-${month}-${day}`;
-                    
-                    if (!scheduleMap[dKey]) scheduleMap[dKey] = {};
-                    
-                    const deptId = e.extendedProps.deptId || 'uncategorized';
-                    if (!scheduleMap[dKey][deptId]) {
-                         // Find dept info
-                         const deptDetails = this.state.departments.find(d => d.id == deptId) || { dept_name: '기타', dept_color: '#333' };
-                         scheduleMap[dKey][deptId] = {
-                             info: deptDetails,
-                             events: []
-                         };
-                    }
-                    scheduleMap[dKey][deptId].events.push(e);
-
-                    // Next day
-                    current.setDate(current.getDate() + 1);
-                    if (!e.end) break; // Single day event
-                }
-            }
-        });
-
-        // 4. Bind Search
-        const searchInput = document.getElementById('search-schedule');
-        const searchResults = document.getElementById('search-results');
-
-        if (searchInput) {
-            searchInput.addEventListener('input', (e) => {
-                const query = e.target.value.toLowerCase().trim();
-                if (query.length < 2) {
-                    searchResults.classList.add('hidden');
-                    return;
-                }
-
-                const matches = this.state.schedules.filter(s =>
-                    s.title.toLowerCase().includes(query) ||
-                    (s.description && s.description.toLowerCase().includes(query))
-                );
-
-                searchResults.classList.remove('hidden');
-                if (matches.length === 0) {
-                    searchResults.innerHTML = `<div class="text-gray-400 p-2 text-xs">검색 결과가 없습니다.</div>`;
-                } else {
-                    searchResults.innerHTML = matches.map(s => `
-                        <div class="cursor-pointer hover:bg-purple-50 p-2 rounded truncate border-b last:border-0" data-date="${s.start_date}" data-id="${s.id}">
-                            <div class="font-bold text-gray-700 text-xs">${s.title}</div>
-                            <div class="text-xs text-gray-500">${s.start_date}</div>
-                        </div>
-                    `).join('');
-
-                    // Bind clicks
-                    searchResults.querySelectorAll('div[data-date]').forEach(el => {
-                        el.onclick = () => {
-                            this.state.calendar.gotoDate(el.dataset.date);
-                            searchResults.classList.add('hidden');
-                            searchInput.value = '';
-                        };
-                    });
-                }
-            });
-            
-            // Close search on click outside
-            document.addEventListener('click', (e) => {
-                if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
-                    searchResults.classList.add('hidden');
-                }
-            });
-        }
-
-        // 5. Initialize FullCalendar
+        // 2. Setup FullCalendar
         const calendar = new FullCalendar.Calendar(calendarEl, {
             initialView: window.innerWidth < 768 ? 'listWeek' : 'dayGridMonth',
             locale: 'ko',
@@ -1890,187 +1886,60 @@ const App = {
             dayMaxEvents: false,
             weekends: false, 
             firstDay: 1, // Start on Monday
-            events: backgroundEvents, // Only backgrounds
             
-            // Custom Classes for Red Dates
+            // Dynamic Fetching on View Change
+            datesSet: async (info) => {
+                await this.refreshCalendarData(info.start, info.end);
+            },
+
             // Custom Classes for Red Dates
             dayCellClassNames: (arg) => {
-                const year = arg.date.getFullYear();
-                const month = String(arg.date.getMonth() + 1).padStart(2, '0');
-                const day = String(arg.date.getDate()).padStart(2, '0');
-                const dateStr = `${year}-${month}-${day}`;
+                const dateStr = this.formatLocal(arg.date);
+                const data = this.state.calendarData || { redDayMap: {}, holidayMap: {} };
                 
-                // 1. Fixed/Variable Holiday -> RED
-                if (redDayMap[dateStr]) {
-                    return ['is-holiday'];
-                }
+                if (data.redDayMap[dateStr]) return ['is-holiday'];
                 
-                // 2. Major/Env Event on Weekend -> RED (User Request)
-                if (holidayMap[dateStr]) {
+                if (data.holidayMap[dateStr]) {
                     const d = arg.date.getDay();
                     if (d === 0 || d === 6) return ['is-holiday'];
                 }
-                
                 return [];
             },
 
-            // Custom Content (Holiday Name + Date + Grouped Schedules)
+            // Custom Content (Delegated to renderCalendarCell)
             dayCellContent: (arg) => {
-                const year = arg.date.getFullYear();
-                const month = String(arg.date.getMonth() + 1).padStart(2, '0');
-                const day = String(arg.date.getDate()).padStart(2, '0');
-                const dateStr = `${year}-${month}-${day}`;
-
-                // Container
-                const container = document.createElement('div');
-                container.className = "flex flex-col h-full w-full justify-start items-start";
-
-                // 1. Holiday Header Row
-                const headerRow = document.createElement('div');
-                headerRow.style.display = 'grid';
-                headerRow.style.gridTemplateColumns = 'minmax(0, 1fr) 32px'; // Stricter bounds
-                headerRow.style.alignItems = 'baseline'; 
-                headerRow.style.width = '100%';
-                headerRow.style.marginBottom = '2px';
-                
-                if (holidayMap[dateStr]) {
-                    // Container for hanging punctuation strategy
-                    const nameContainer = document.createElement('div');
-                    nameContainer.style.overflow = 'hidden'; 
-                    nameContainer.style.textAlign = 'right';
-                    nameContainer.style.lineHeight = '1.2';
-                    nameContainer.style.paddingTop = '3px'; 
-                    nameContainer.style.marginRight = '2px'; // Slight gap from date column
-                    
-                    holidayMap[dateStr].forEach((name, index) => {
-                        const itemSpan = document.createElement('span');
-                        itemSpan.style.display = 'inline-block';
-                        itemSpan.style.fontSize = '12px';
-                        itemSpan.style.wordBreak = 'keep-all';
-                        itemSpan.style.position = 'relative'; 
-                        
-                        if (index > 0) itemSpan.style.marginLeft = '3px'; // Tighter gap between items
-                        
-                        itemSpan.className = "holiday-name"; 
-                        itemSpan.textContent = name;
-                        
-                        // Only add comma if NOT the last item
-                        if (index < holidayMap[dateStr].length - 1) {
-                            const commaSpan = document.createElement('span');
-                            commaSpan.textContent = ',';
-                            commaSpan.style.position = 'absolute';
-                            commaSpan.style.right = '-3px'; // Tighter hang
-                            commaSpan.style.top = '0';
-                            itemSpan.appendChild(commaSpan);
-                        }
-                        
-                        nameContainer.appendChild(itemSpan);
-                    });
-                    
-                    nameContainer.title = holidayMap[dateStr].join(', '); 
-                    
-                    headerRow.appendChild(nameContainer);
-                } else {
-                     headerRow.appendChild(document.createElement('div'));
-                }
-
-                const dayLink = document.createElement('a');
-                dayLink.className = "fc-daygrid-day-number";
-                dayLink.style.whiteSpace = 'nowrap';
-                dayLink.style.textAlign = 'right';
-                dayLink.style.marginRight = '0'; 
-                dayLink.style.padding = '0';
-                dayLink.style.textDecoration = 'none';
-                dayLink.textContent = arg.dayNumberText;
-                headerRow.appendChild(dayLink);
-                
-                container.appendChild(headerRow);
-
-                // 2. Scheduled Events Grouping
-                if (scheduleMap[dateStr]) {
-                    const groups = scheduleMap[dateStr];
-                    // Sort order
-                    const sortedDeptIds = Object.keys(groups).sort((a,b) => {
-                        const infoA = groups[a].info;
-                        const infoB = groups[b].info;
-                        const idxA = this.state.departments.findIndex(d => d.id == a);
-                        const idxB = this.state.departments.findIndex(d => d.id == b);
-                        return idxA - idxB;
-                    });
-
-                    sortedDeptIds.forEach(deptId => {
-                        const group = groups[deptId];
-                        const deptDiv = document.createElement('div');
-                        deptDiv.className = "w-full text-xs text-left mb-2 pl-1";
-                        
-                        // Header: ◈ Dept Name
-                        const deptHeader = document.createElement('div');
-                        deptHeader.className = "font-bold mb-0.5 whitespace-nowrap overflow-hidden text-ellipsis";
-                        deptHeader.style.color = '#000'; 
-                        deptHeader.innerHTML = `<span style="color:${group.info.dept_color}">◈</span> ${group.info.dept_name}`;
-                        deptDiv.appendChild(deptHeader);
-
-                        // Events List
-                        group.events.forEach(ev => {
-                            const evDiv = document.createElement('div');
-                            evDiv.className = "cursor-pointer hover:bg-gray-100 rounded px-1 py-0.5 break-words";
-                            evDiv.textContent = ev.title; 
-                            evDiv.title = ev.title; // Tooltip
-                            evDiv.onclick = (e) => {
-                                e.stopPropagation();
-                                this.openScheduleModal(ev.id);
-                            };
-                            deptDiv.appendChild(evDiv);
-                        });
-                        
-                        container.appendChild(deptDiv);
-                    });
-                }
-                
-                return { domNodes: [container] };
+                return this.renderCalendarCell(arg);
             },
 
-            eventDidMount: (info) => {
-               // Only background events come here now.
-            },
             windowResize: (view) => {
-                if (window.innerWidth < 768) {
-                    calendar.changeView('listWeek');
-                } else {
-                    calendar.changeView('dayGridMonth');
-                }
+                if (window.innerWidth < 768) calendar.changeView('listWeek');
+                else calendar.changeView('dayGridMonth');
             },
             dateClick: (info) => {
                 this.openScheduleModal(null, info.dateStr);
-            },
-            eventClick: (info) => {
-                if (info.event.display !== 'background') {
-                    // Safety
-                    this.openScheduleModal(info.event.id);
-                }
             }
         });
 
-        this.state.calendar = calendar; 
+        this.state.calendar = calendar;
         calendar.render();
 
-        // Bind Sat/Sun Toggle
-        const chkWeekends = document.getElementById('chk-show-weekends');
-        if (chkWeekends) {
-            chkWeekends.checked = false; 
-            chkWeekends.addEventListener('change', (e) => {
-                calendar.setOption('weekends', e.target.checked);
+        // 4. Weekend Toggle Initialization
+        const weekendChk = document.getElementById('chk-show-weekends');
+        if (weekendChk) {
+            // Load preference
+            const showWeekends = localStorage.getItem('calendar-show-weekends') === 'true';
+            weekendChk.checked = showWeekends;
+            calendar.setOption('weekends', showWeekends);
+
+            weekendChk.addEventListener('change', (e) => {
+                const isChecked = e.target.checked;
+                calendar.setOption('weekends', isChecked);
+                localStorage.setItem('calendar-show-weekends', isChecked);
             });
         }
-        
-        // Bind New Toolbar Buttons
-        document.getElementById('btn-add-schedule')?.addEventListener('click', () => {
-            this.openScheduleModal(null, new Date().toISOString().split('T')[0]);
-        });
 
-        document.getElementById('btn-print-modal')?.addEventListener('click', () => {
-             this.openPrintModal();
-        });
+        // 3. Search Initialization
+        this.bindCalendarSearch();
     },
 
     // --- Data Fetching ---
@@ -2161,23 +2030,31 @@ const App = {
             adminEventMap[date].add(normalize(name));
         };
 
-        // --- 2. Process Basic Schedules (New Table) ---
-        // basicSchedules is array of { type, code, name, start_date, end_date, is_holiday }
+        // basicSchedules is array of { type, code, name, start_date, end_date, is_holiday, academic_year }
         if (basicSchedules && Array.isArray(basicSchedules)) {
             
             basicSchedules.forEach(item => {
+                // --- 1.5 Academic Year Consistency Check ---
+                // Basic schedules must fall within their academic year (Mar 1 to Feb 29 of next year)
+                if (item.academic_year && item.start_date) {
+                    const ay = parseInt(item.academic_year);
+                    const ayStart = `${ay}-03-01`;
+                    const ayEnd = `${ay + 1}-02-29`;
+                    if (item.start_date < ayStart || item.start_date > ayEnd) {
+                        return; // Skip ghost data inconsistent with its academic year
+                    }
+                }
+
                 // Determine styling based on type
                 let className = 'holiday-bg-event';
                 let bgColor = '';
                 let isExam = false; 
 
-                if (item.type === 'term' || item.type === 'vacation') {
-                     // Basic schedules (Header Text)
-                     // If it has a code like TERM..., SUMMER..., display as header
-                     // Reusing holiday class for header text styling (left-aligned)
+                if (item.type === 'vacation') {
+                     className = 'vacation-bg-event';
+                } else if (item.type === 'term') {
                      className = 'holiday-bg-event'; 
                 } else if (item.type === 'holiday') {
-                     // Holidays
                      className = 'holiday-bg-event';
                 } else if (item.type === 'exam') {
                      isExam = true;
@@ -2207,11 +2084,6 @@ const App = {
                     let current = new Date(item.start_date);
                     const endDate = new Date(item.end_date);
                     let loop = 0;
-                    
-                    // For Rendering, we can use a single Range Event IF it's background
-                    // BUT FullCalendar Background events don't support "Labels" well across days unless we hack it.
-                    // Our 'extendedProps.label' hack relies on dayCellContent injection which works per cell.
-                    // So we must push per-day events for the labels to show up on every day.
                     
                     while (current <= endDate && loop < 365) {
                         const dStr = current.toISOString().split('T')[0];
@@ -2658,11 +2530,16 @@ const App = {
 
         let parsedBasic = [];
         let parsedNormal = [];
+        let excelCount = 0;
 
         // Populate Year Options
         const currentYear = this.state.currentYear || new Date().getFullYear();
         yearSelect.innerHTML = '';
-        [currentYear - 1, currentYear, currentYear + 1, currentYear + 2].forEach(y => {
+        const years = [];
+        for (let i = -5; i <= 5; i++) {
+            years.push(currentYear + i);
+        }
+        years.forEach(y => {
             const opt = document.createElement('option');
             opt.value = y;
             opt.text = `${y}학년도`;
@@ -2684,21 +2561,15 @@ const App = {
             const ws_data = [
                 ['구분(기본/휴일/일반)', '부서명(일반인 경우)', '일정명', '시작일(YYYY-MM-DD)', '종료일(YYYY-MM-DD)', '내용', '공개범위(전체/교직원/부서)'],
                 // 학기/방학 행사
-                ['기본', '', '1학기 개학일', '', '', '', '전체'],
-                ['기본', '', '여름방학식', '', '', '', '전체'],
-                ['기본', '', '여름방학', '', '', '', '전체'],
-                ['기본', '', '2학기 개학일', '', '', '', '전체'],
-                ['기본', '', '겨울방학식', '', '', '', '전체'],
-                ['기본', '', '겨울방학', '', '', '', '전체'],
-                ['기본', '', '봄 개학일', '', '', '', '전체'],
-                ['기본', '', '봄방학식', '', '', '', '전체'],
+                ['기본', '', '여름방학', '2026-07-22', '2026-08-12', '', '전체'],
+                ['기본', '', '겨울방학', '2026-01-07', '', '', '전체'],
                 ['기본', '', '봄방학', '', '', '', '전체'],
                 
                 // 고사 일정 (범위)
-                ['기본', '', '1학기 1차지필', '', '', '', '전체'],
-                ['기본', '', '1학기 2차지필', '', '', '', '전체'],
-                ['기본', '', '2학기 1차지필', '', '', '', '전체'],
-                ['기본', '', '2학기 2차지필', '', '', '', '전체'],
+                ['기본', '', '1학기 1차지필', '2026-04-24', '2026-04-29', '', '전체'],
+                ['기본', '', '1학기 2차지필', '2026-06-30', '2026-07-06', '', '전체'],
+                ['기본', '', '2학기 1차지필', '2026-09-30', '2026-10-06', '', '전체'],
+                ['기본', '', '2학기 2차지필', '2026-12-10', '2026-12-16', '', '전체'],
                 ['기본', '', '3학년 2학기 2차지필', '', '', '', '전체'],
 
                 // 예시
@@ -2724,26 +2595,35 @@ const App = {
             const reader = new FileReader();
             reader.onload = (evt) => {
                 const data = new Uint8Array(evt.target.result);
-                const workbook = XLSX.read(data, { type: 'array' });
+                // cellDates: true ensures dates come as JS Date objects, not serial numbers
+                const workbook = XLSX.read(data, { type: 'array', cellDates: true });
                 const firstSheetName = workbook.SheetNames[0];
                 const worksheet = workbook.Sheets[firstSheetName];
 
                 // Convert to JSON
                 const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
                 // Remove header row
-                rawRows.shift();
+                if(rawRows.length > 0) rawRows.shift();
+                
+                if (rawRows.length === 0) {
+                    alert('엑셀 파일에 데이터가 없습니다.');
+                    return;
+                }
 
                 // Auto-Mapping Definition
                 const titleMap = {
                     '1학기 개학일': { code: 'TERM1_START', type: 'term' },
                     '여름방학식': { code: 'SUMMER_VAC_CEREMONY', type: 'event' },
                     '여름방학': { code: 'SUMMER_VAC', type: 'vacation' }, // Range
+                    '여름방학 기간': { code: 'SUMMER_VAC', type: 'vacation' }, 
                     '2학기 개학일': { code: 'TERM2_START', type: 'term' },
                     '겨울방학식': { code: 'WINTER_VAC_CEREMONY', type: 'event' },
                     '겨울방학': { code: 'WINTER_VAC', type: 'vacation' }, // Range
+                    '겨울방학 기간': { code: 'WINTER_VAC', type: 'vacation' },
                     '봄 개학일': { code: 'SPRING_SEM_START', type: 'term' },
                     '봄방학식': { code: 'SPRING_VAC_CEREMONY', type: 'event' },
                     '봄방학': { code: 'SPRING_VAC', type: 'vacation' }, // Range
+                    '봄방학 기간': { code: 'SPRING_VAC', type: 'vacation' },
                     
                     // Exams (Range)
                     '1학기 1차지필': { code: 'EXAM_1_1', type: 'exam' },
@@ -2756,26 +2636,47 @@ const App = {
                 const depts = this.state.departments; 
                 parsedBasic = [];
                 parsedNormal = [];
-                let validCount = 0;
                 let errors = [];
 
                 // Use the year selected in dropdown
                 const year = selectedYear; 
 
+                excelCount = 0;
                 rawRows.forEach((row, idx) => {
-                    if (row.length < 3) return; // Skip empty rows
+                    // Check for completely empty row
+                    if (!row || row.length === 0) return; 
+                    
                     // Columns: 0:Type, 1:Dept, 2:Title, 3:Start, 4:End, 5:Desc, 6:Vis
-                    const typeRaw = (row[0] || '').trim();
-                    const deptName = (row[1] || '').trim();
-                    const title = (row[2] || '').trim();
-                    let start = row[3];
-                    let end = row[4];
-                    const desc = (row[5] || '').trim();
-                    const visibilityRaw = (row[6] || '').trim();
+                    const typeRaw = (row[0] || '').toString().trim();
+                    const deptName = (row[1] || '').toString().trim();
+                    const title = (row[2] || '').toString().trim();
+                    // Parse Dates: Handle JS Date object (from cellDates: true) or String
+                    const parseDate = (v) => {
+                        if (!v) return '';
+                        if (v instanceof Date) {
+                            const y = v.getFullYear();
+                            const m = String(v.getMonth() + 1).padStart(2, '0');
+                            const d = String(v.getDate()).padStart(2, '0');
+                            return `${y}-${m}-${d}`;
+                        }
+                        return v.toString().trim();
+                    };
+
+                    let start = parseDate(row[3]);
+                    let end = parseDate(row[4]);
+                    const desc = (row[5] || '').toString().trim();
+                    const visibilityRaw = (row[6] || '').toString().trim();
 
                     if (!title || !start) {
                          // Only skip if completely empty
                          if(!typeRaw && !title && !start) return;
+
+                         // Skip optional events if start date is missing without error
+                         // Using .includes for better matching
+                         if (title && !start && (title.includes('봄방학') || title.includes('2차지필'))) {
+                             return;
+                         }
+
                          errors.push(`${idx+2}행: 필수 정보 누락 (일정명, 시작일)`);
                          return;
                     }
@@ -2807,7 +2708,7 @@ const App = {
                                 is_holiday: typeRaw === '휴일'
                             });
                         }
-                        validCount++;
+                        excelCount++;
                     } else if (typeRaw === '일반') {
                          // Match Dept
                         const dept = depts.find(d => d.dept_name === deptName) || depts[0]; 
@@ -2827,15 +2728,131 @@ const App = {
                             author_id: this.state.user.id,
                             is_printable: true
                         });
-                        validCount++;
+                        excelCount++;
                     } else {
                         errors.push(`${idx+2}행: 구분 값 오류 ('기본', '휴일', 또는 '일반' 입력)`);
                     }
                 });
                 
+                // --- Auto-Calculation Logic (Holiday Aware) ---
                 
+                // Helper: Check if a date is a school day and not a holiday
+                const isSchoolDay = (d) => {
+                    const day = d.getDay();
+                    if (day === 0 || day === 6) return false; // Weekend
+                    
+                    const dStr = d.toISOString().split('T')[0];
+                    // Check Parsed Holidays (Basic & Holiday type)
+                    const isParsedHoliday = parsedBasic.some(p => p.is_holiday && p.start_date <= dStr && p.end_date >= dStr);
+                    if (isParsedHoliday) return false;
+                    
+                    return true;
+                };
+
+                const findPrevSchoolDay = (startDateStr) => {
+                    let d = new Date(startDateStr);
+                    d.setDate(d.getDate() - 1); // Start from day before
+                    let safety = 0;
+                    while (safety < 30) {
+                        if (isSchoolDay(d)) return d.toISOString().split('T')[0];
+                        d.setDate(d.getDate() - 1);
+                        safety++;
+                    }
+                    return startDateStr; // Fallback
+                };
+
+                const findNextSchoolDay = (endDateStr) => {
+                    let d = new Date(endDateStr);
+                    d.setDate(d.getDate() + 1); // Start from day after
+                    let safety = 0;
+                    while (safety < 30) {
+                        if (isSchoolDay(d)) return d.toISOString().split('T')[0];
+                        d.setDate(d.getDate() + 1);
+                        safety++;
+                    }
+                    return endDateStr; // Fallback
+                };
                 
-                previewCount.textContent = validCount;
+                // Helper to find if code exists
+                const hasCode = (code) => parsedBasic.some(p => p.code === code);
+                const getCodeItem = (code) => parsedBasic.find(p => p.code === code);
+
+                // 2. Summer Vac Ceremony (If missing, detected by VAC start)
+                const summerVac = getCodeItem('SUMMER_VAC');
+                if (summerVac && !hasCode('SUMMER_VAC_CEREMONY')) {
+                    const ceremonyDate = findPrevSchoolDay(summerVac.start_date);
+                    parsedBasic.push({
+                        academic_year: year,
+                        type: 'event',
+                        code: 'SUMMER_VAC_CEREMONY',
+                        name: '여름방학식',
+                        start_date: ceremonyDate,
+                        end_date: ceremonyDate,
+                        is_holiday: false
+                    });
+                }
+
+                // 3. Term 2 Start (If missing, detected by VAC end)
+                if (summerVac && !hasCode('TERM2_START')) {
+                    const term2Start = findNextSchoolDay(summerVac.end_date);
+                    parsedBasic.push({
+                        academic_year: year,
+                        type: 'term',
+                        code: 'TERM2_START',
+                        name: '2학기 개학일',
+                        start_date: term2Start,
+                        end_date: term2Start,
+                        is_holiday: false
+                    });
+                }
+
+                // 4. Winter Vac Ceremony (If missing, detected by Winter start)
+                const winterVac = getCodeItem('WINTER_VAC');
+                if (winterVac && !hasCode('WINTER_VAC_CEREMONY')) {
+                    const ceremonyDate = findPrevSchoolDay(winterVac.start_date);
+                    parsedBasic.push({
+                        academic_year: year,
+                        type: 'event',
+                        code: 'WINTER_VAC_CEREMONY',
+                        name: '겨울방학식',
+                        start_date: ceremonyDate,
+                        end_date: ceremonyDate,
+                        is_holiday: false
+                    });
+                }
+
+                // 5. Spring Sem Start (If missing, detected by Winter end)
+                if (winterVac && !hasCode('SPRING_SEM_START')) {
+                    const nextSchoolDay = findNextSchoolDay(winterVac.end_date);
+                    const nDate = new Date(nextSchoolDay);
+                    if (nDate.getMonth() !== 2) { 
+                        parsedBasic.push({
+                            academic_year: year,
+                            type: 'term',
+                            code: 'SPRING_SEM_START',
+                            name: '봄 개학일',
+                            start_date: nextSchoolDay,
+                            end_date: nextSchoolDay,
+                            is_holiday: false
+                        });
+                    }
+                }
+
+                // 6. Spring Vac Ceremony (If missing, detected by Spring Vac start)
+                const springVac = getCodeItem('SPRING_VAC');
+                if (springVac && !hasCode('SPRING_VAC_CEREMONY')) {
+                    const ceremonyDate = findPrevSchoolDay(springVac.start_date);
+                     parsedBasic.push({
+                        academic_year: year,
+                        type: 'event',
+                        code: 'SPRING_VAC_CEREMONY',
+                        name: '봄방학식',
+                        start_date: ceremonyDate,
+                        end_date: ceremonyDate,
+                        is_holiday: false
+                    });
+                }
+                // --- Auto-Calculation Logic End ---
                 statusArea.classList.remove('hidden');
                 
                 // Show errors if any (Simple alert or list)
@@ -2843,32 +2860,54 @@ const App = {
                     alert('일부 데이터 오류:\n' + errors.slice(0, 5).join('\n') + (errors.length > 5 ? '\n...' : ''));
                 }
 
-                if (validCount > 0) {
+                if (excelCount > 0) {
+                    statusArea.innerHTML = `<span class="text-green-600 font-bold">총 ${excelCount}건의 일정 발견</span>`;
                     btnUpload.disabled = false;
+                    btnUpload.classList.remove('opacity-50', 'cursor-not-allowed');
+                } else {
+                    let debugMsg = '총 0건의 일정이 발견되었습니다.\n';
+                    if (rawRows && rawRows.length > 0) {
+                        const firstRow = rawRows[0];
+                        const rowData = firstRow.map((v, i) => `[${i}] ${v}`).join(', ');
+                        debugMsg += `\n[디버깅 정보]\n`;
+                        debugMsg += `첫 행 데이터 길이: ${firstRow.length}\n`;
+                        debugMsg += `데이터 내용: ${rowData}\n`;
+                        debugMsg += `\n[매핑 시도]\n`;
+                        debugMsg += `구분(Col 0): "${(firstRow[0]||'').toString().trim()}"\n`;
+                        debugMsg += `제목(Col 2): "${(firstRow[2]||'').toString().trim()}"\n`;
+                        if(errors.length > 0) {
+                            debugMsg += `\n[오류 메시지(3건)]\n${errors.slice(0, 3).join('\n')}`;
+                        }
+                    } else {
+                        debugMsg += '데이터 행이 비어있습니다.';
+                    }
+                    statusArea.innerHTML = `<span class="text-red-500 font-bold">발견된 일정이 없습니다.</span>`;
+                    alert(debugMsg);
                 }
             };
             reader.readAsArrayBuffer(file);
         };
         
-        // Handle Year Change if file already selected? 
-        // Simplest: clear file input if year changes, or re-parse.
-        // Let's add listener to re-parse if file exists
         yearSelect.onchange = () => {
              if(fileInput.files.length > 0) {
-                 // Trigger change event manually or extract logic
                  fileInput.dispatchEvent(new Event('change'));
              }
         };
 
         // Upload Action
         btnUpload.onclick = async () => {
-             // Re-read selected year to be safe, though parsed data already has it embedded.
-             // But showing it in alert is good.
              const selectedYear = yearSelect.value;
-             
             if (parsedBasic.length === 0 && parsedNormal.length === 0) return;
 
-            if(!confirm(`${selectedYear}학년도에 ${parsedBasic.length + parsedNormal.length}건의 일정을 등록하시겠습니까?`)) return;
+            const total = parsedBasic.length + parsedNormal.length;
+            const autoCount = total - excelCount;
+            
+            let confirmMsg = `${selectedYear}학년도 학사일정 ${excelCount}건을 등록하시겠습니까?`;
+            if (autoCount > 0) {
+                confirmMsg += `\n\n(방학식, 개학일 등 ${autoCount}건의 일정이 자동으로 추가 생성됩니다. 총 ${total}건)`;
+            }
+
+            if(!confirm(confirmMsg)) return;
 
             btnUpload.disabled = true;
             btnUpload.textContent = '업로드 중...';
@@ -2891,6 +2930,12 @@ const App = {
                 this.logAction('BULK_INSERT', 'mixed', null, { basic: parsedBasic.length, normal: parsedNormal.length });
                 alert(`총 ${parsedBasic.length + parsedNormal.length}건의 일정이 등록되었습니다.`);
                 close();
+                
+                // Auto-refresh Admin View if available
+                if (this.refreshAdminView) {
+                    await this.refreshAdminView(parseInt(selectedYear));
+                }
+                
                 if (this.state.calendar) this.initCalendar();
 
             } catch (e) {
@@ -2903,6 +2948,259 @@ const App = {
     },
 
     // --- Logging System ---
+
+    fetchDepartments: async function () {
+        const { data, error } = await window.SupabaseClient.supabase
+            .from('departments')
+            .select('*')
+            .order('sort_order', { ascending: true });
+            
+        if (error) {
+            console.error("fetchDepartments Error:", error);
+            return [];
+        }
+        return data || [];
+    },
+
+    logAction: async function (action, table, targetId, details) {
+        if (!this.state.user) return;
+
+        // Fire and forget
+        window.SupabaseClient.supabase.from('audit_logs').insert([{
+            user_id: this.state.user.id,
+            action_type: action,
+            target_table: table,
+            target_id: targetId,
+            changes: JSON.stringify(details)
+        }]).then(({ error }) => {
+            if (error) console.error("Audit Log Error:", error);
+        });
+    },
+
+    logError: async function (msg, url, line, col, errorObj) {
+        const errDetails = {
+            msg: msg,
+            url: url,
+            line: line,
+            col: col,
+            stack: errorObj?.stack
+        };
+        console.error("Capturing Client Error:", errDetails);
+
+        window.SupabaseClient.supabase.from('error_logs').insert([{
+            error_message: msg,
+            stack_trace: JSON.stringify(errDetails),
+            user_id: this.state.user?.id || null // Log user if known
+        }]).then(({ error }) => {
+            if (error) console.error("Failed to log error to DB:", error);
+        });
+    },
+
+    bindCalendarSearch: function() {
+        const searchInput = document.getElementById('search-schedule');
+        const searchResults = document.getElementById('search-results');
+        if (!searchInput) return;
+
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase().trim();
+            if (query.length < 2) {
+                searchResults.classList.add('hidden');
+                return;
+            }
+
+            const matches = (this.state.schedules || []).filter(s =>
+                s.title.toLowerCase().includes(query) ||
+                (s.description && s.description.toLowerCase().includes(query))
+            );
+
+            searchResults.classList.remove('hidden');
+            if (matches.length === 0) {
+                searchResults.innerHTML = `<div class="text-gray-400 p-2 text-xs">검색 결과가 없습니다.</div>`;
+            } else {
+                searchResults.innerHTML = matches.map(s => `
+                    <div class="cursor-pointer hover:bg-purple-50 p-2 rounded truncate border-b last:border-0" data-date="${s.start_date}" data-id="${s.id}">
+                        <div class="font-bold text-gray-700 text-xs">${s.title}</div>
+                        <div class="text-xs text-gray-500">${s.start_date}</div>
+                    </div>
+                `).join('');
+
+                searchResults.querySelectorAll('div[data-date]').forEach(el => {
+                    el.onclick = () => {
+                        this.state.calendar.gotoDate(el.dataset.date);
+                        searchResults.classList.add('hidden');
+                        searchInput.value = '';
+                    };
+                });
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
+                searchResults.classList.add('hidden');
+            }
+        });
+    },
+
+    refreshCalendarData: async function(start, end) {
+        const startY = start.getFullYear();
+        const endY = end.getFullYear();
+        const academicYears = [];
+        for(let cy = startY - 1; cy <= endY; cy++) {
+            academicYears.push(cy);
+        }
+
+        const [basicRows, departments, schedules] = await Promise.all([
+            window.SupabaseClient.supabase.from('basic_schedules').select('*').in('academic_year', academicYears),
+            this.fetchDepartments(),
+            this.fetchSchedules()
+        ]);
+
+        this.state.departments = departments;
+        this.state.schedules = schedules; 
+        
+        const data = {
+            holidayMap: {},
+            redDayMap: {},
+            scheduleMap: {},
+            backgroundEvents: [],
+            departments: this.state.departments
+        };
+
+        const allEvents = this.transformEvents(schedules, {}, data.departments, basicRows.data || []);
+
+        allEvents.forEach(e => {
+            const dateKey = e.start;
+            if (e.display === 'background' || e.display === 'block') {
+                if (e.display === 'background') data.backgroundEvents.push(e);
+                
+                if (e.className.includes('holiday-bg-event') || e.className.includes('event-major-text') || e.className.includes('event-env-text') || e.className.includes('event-exam-text')) {
+                     if (!data.holidayMap[dateKey]) data.holidayMap[dateKey] = [];
+                     const label = e.extendedProps?.label || e.title;
+                     if (label && !data.holidayMap[dateKey].includes(label)) data.holidayMap[dateKey].push(label);
+                     if (e.className.includes('holiday-bg-event')) data.redDayMap[dateKey] = true;
+                }
+            } else {
+                let current = new Date(e.start);
+                const endEv = e.end ? new Date(e.end) : new Date(e.start);
+                let daysCount = 0;
+                while (current < endEv || (current.getTime() === endEv.getTime() && !e.end)) {
+                    if (daysCount > 365) break; 
+                    const dKey = this.formatLocal(current);
+                    if (!data.scheduleMap[dKey]) data.scheduleMap[dKey] = {};
+                    const deptId = e.extendedProps.deptId || 'uncategorized';
+                    if (!data.scheduleMap[dKey][deptId]) {
+                         const deptDetails = (data.departments || []).find(d => d.id == deptId) || { dept_name: '기타', dept_color: '#333' };
+                         data.scheduleMap[dKey][deptId] = { info: deptDetails, events: [] };
+                    }
+                    data.scheduleMap[dKey][deptId].events.push(e);
+                    current.setDate(current.getDate() + 1);
+                    if (!e.end) break;
+                    daysCount++;
+                }
+            }
+        });
+
+        this.state.calendarData = data;
+        this.state.calendar.setOption('events', data.backgroundEvents);
+    },
+
+    renderCalendarCell: function(arg) {
+        const dateStr = this.formatLocal(arg.date);
+        const data = this.state.calendarData || { holidayMap: {}, redDayMap: {}, scheduleMap: {}, departments: [] };
+
+        const container = document.createElement('div');
+        container.className = "flex flex-col h-full w-full justify-start items-start";
+
+        const headerRow = document.createElement('div');
+        headerRow.style.display = 'grid';
+        headerRow.style.gridTemplateColumns = '35px minmax(0, 1fr)';
+        headerRow.style.alignItems = 'baseline'; 
+        headerRow.style.width = '100%';
+        headerRow.style.marginBottom = '2px';
+        
+        // 1. Day Number (Left)
+        const dayLink = document.createElement('a');
+        dayLink.className = "fc-daygrid-day-number";
+        dayLink.style.whiteSpace = 'nowrap';
+        dayLink.style.textAlign = 'left';
+        dayLink.style.paddingLeft = '4px';
+        dayLink.style.textDecoration = 'none';
+        dayLink.textContent = arg.dayNumberText;
+        headerRow.appendChild(dayLink);
+
+        // 2. Holiday Names (Right)
+        if (data.holidayMap[dateStr]) {
+            const nameContainer = document.createElement('div');
+            nameContainer.style.overflow = 'hidden'; 
+            nameContainer.style.textAlign = 'right';
+            nameContainer.style.lineHeight = '1.2';
+            nameContainer.style.paddingTop = '1px'; 
+            nameContainer.style.marginRight = '4px';
+            
+            data.holidayMap[dateStr].forEach((name, index) => {
+                const itemSpan = document.createElement('span');
+                itemSpan.style.display = 'inline-block';
+                itemSpan.style.fontSize = '12px';
+                itemSpan.style.wordBreak = 'keep-all';
+                itemSpan.style.position = 'relative'; 
+                if (index > 0) itemSpan.style.marginLeft = '4px';
+                
+                itemSpan.className = "holiday-name"; 
+                itemSpan.textContent = name;
+                
+                if (index < data.holidayMap[dateStr].length - 1) {
+                    const commaSpan = document.createElement('span');
+                    commaSpan.textContent = ',';
+                    commaSpan.style.position = 'absolute';
+                    commaSpan.style.right = '-4px';
+                    commaSpan.style.top = '0';
+                    itemSpan.appendChild(commaSpan);
+                }
+                nameContainer.appendChild(itemSpan);
+            });
+            nameContainer.title = data.holidayMap[dateStr].join(', '); 
+            headerRow.appendChild(nameContainer);
+        } else {
+            headerRow.appendChild(document.createElement('div'));
+        }
+
+        container.appendChild(headerRow);
+
+        if (data.scheduleMap[dateStr]) {
+            const groups = data.scheduleMap[dateStr];
+            const sortedDeptIds = Object.keys(groups).sort((a,b) => {
+                const idxA = (data.departments || []).findIndex(d => d.id == a);
+                const idxB = (data.departments || []).findIndex(d => d.id == b);
+                return idxA - idxB;
+            });
+
+            sortedDeptIds.forEach(deptId => {
+                const group = groups[deptId];
+                const deptDiv = document.createElement('div');
+                deptDiv.className = "w-full text-xs text-left mb-2 pl-1";
+                
+                const deptHeader = document.createElement('div');
+                deptHeader.className = "font-bold mb-0.5 whitespace-nowrap overflow-hidden text-ellipsis";
+                deptHeader.style.color = '#000'; 
+                deptHeader.innerHTML = `<span style="color:${group.info.dept_color}">◈</span> ${group.info.dept_name}`;
+                deptDiv.appendChild(deptHeader);
+
+                group.events.forEach(ev => {
+                    const evDiv = document.createElement('div');
+                    evDiv.className = "cursor-pointer hover:bg-gray-100 rounded px-1 py-0.5 break-words";
+                    evDiv.textContent = ev.title; 
+                    evDiv.title = ev.title;
+                    evDiv.onclick = (e) => {
+                        e.stopPropagation();
+                        this.openScheduleModal(ev.id);
+                    };
+                    deptDiv.appendChild(evDiv);
+                });
+                container.appendChild(deptDiv);
+            });
+        }
+        return { domNodes: [container] };
+    },
 
     fetchDepartments: async function () {
         const { data, error } = await window.SupabaseClient.supabase
