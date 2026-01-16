@@ -194,7 +194,7 @@ body {
 }
 
 /* Triangle indicator for days in the current month */
-.fc-daygrid-day:not(.fc-day-other) .fc-daygrid-day-top::before {
+.fc-daygrid-day:not(.fc-day-other) .calendar-cell-header::before {
     content: "";
     position: absolute;
     top: 0;
@@ -208,9 +208,9 @@ body {
 }
 
 /* Red triangle for Sat/Sun/Holidays (only in current month) */
-.fc-day-sun:not(.fc-day-other) .fc-daygrid-day-top::before,
-.fc-day-sat:not(.fc-day-other) .fc-daygrid-day-top::before,
-.is-holiday:not(.fc-day-other) .fc-daygrid-day-top::before {
+.fc-day-sun:not(.fc-day-other) .calendar-cell-header::before,
+.fc-day-sat:not(.fc-day-other) .calendar-cell-header::before,
+.is-holiday:not(.fc-day-other) .calendar-cell-header::before {
     border-top-color: #dc2626 !important;
 }
 

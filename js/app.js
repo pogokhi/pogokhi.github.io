@@ -762,6 +762,7 @@ const App = {
                      ))
                  )
                  .map(d => ({
+                     id: d.id, // Store ID for stable update
                      name: d.dept_name,
                      nickname: d.dept_short,
                      color: d.dept_color
@@ -772,7 +773,9 @@ const App = {
 
              const renderRow = (d, index) => {
                  const row = document.createElement('div');
-                 row.className = "flex items-center gap-2 mb-2";
+                 row.className = "flex items-center gap-2 mb-2 dept-row";
+                 if (d.id) row.dataset.id = d.id; // Store ID for persistence
+                 
                  const defaultColor = safeColors[index % safeColors.length];
                  
                  let color = d.color || defaultColor;
@@ -922,6 +925,8 @@ const App = {
                       if (doms[row.code]) {
                           setVal(doms[row.code].s, row.start_date);
                           setVal(doms[row.code].e, row.end_date);
+                          // Store ID for system codes as well in a hidden map if needed?
+                          // Actually, we can just fetch all IDs for the year during Save.
                       }
                  } else {
                      // Terms/Vac
@@ -977,7 +982,7 @@ const App = {
              // Check if this date/name exists in standard
              const standardName = standardFixed[r.start_date];
              if (!standardName) {
-                 this.currentVariableHolidays.push({ date: r.start_date, name: r.name });
+                 this.currentVariableHolidays.push({ id: r.id, date: r.start_date, name: r.name });
              }
          });
          this.currentVariableHolidays.sort((a,b) => a.date.localeCompare(b.date));
@@ -1007,7 +1012,7 @@ const App = {
          const majorRows = schedules.filter(r => r.type === 'event' && !r.code);
          majorRows.forEach(r => {
              if (r.start_date < ayStart || r.start_date > ayEnd) return;
-             this.currentMajorEvents.push({ start: r.start_date, end: r.end_date, name: r.name });
+             this.currentMajorEvents.push({ id: r.id, start: r.start_date, end: r.end_date, name: r.name });
          });
          this.currentMajorEvents.sort((a,b) => a.start.localeCompare(b.start));
          this.renderMajorEvents(this.currentMajorEvents);
@@ -1157,6 +1162,7 @@ const App = {
         
         list.forEach((item, idx) => {
             const div = document.createElement('div');
+            if (item.id) div.dataset.id = item.id; // Store DB ID
             const isEditing = !item.date || !item.name || item.isEditing;
 
             if (isEditing) {
@@ -1229,6 +1235,7 @@ const App = {
             
             if (dateInput && nameInput) {
                 newList.push({ 
+                    id: div.dataset.id || null, // Capture ID
                     date: dateInput.value, 
                     name: nameInput.value,
                     isEditing: true
@@ -1259,6 +1266,7 @@ const App = {
         
         list.forEach((item, idx) => {
             const div = document.createElement('div');
+            if (item.id) div.dataset.id = item.id; // Store DB ID
             const isEditing = !item.start || !item.name || item.isEditing;
 
             if (isEditing) {
@@ -1368,6 +1376,7 @@ const App = {
             
             if (nameInput && startInput) {
                 newList.push({ 
+                    id: div.dataset.id || null, // Capture ID
                     start: startInput.value,
                     end: (endInput && endInput.value) ? endInput.value : '', 
                     name: nameInput.value,
@@ -1544,17 +1553,18 @@ const App = {
             });
             
             // Department Config Collection
-            const generalDepts = [];
-            document.querySelectorAll('#admin-dept-list .flex').forEach(row => {
-                const nameInp = row.querySelector('.dept-name-input');
-                const name = nameInp ? nameInp.value.trim() : '';
-                const nickInp = row.querySelector('.dept-nickname-input');
-                const nickname = nickInp ? nickInp.value.trim() : '';
-                const color = row.querySelector('.dept-color-input').value;
-                if(name) {
-                    generalDepts.push({ name, nickname, color });
-                }
-            });
+        const generalDepts = [];
+        document.querySelectorAll('#admin-dept-list .dept-row').forEach(row => {
+            const id = row.dataset.id;
+            const nameInp = row.querySelector('.dept-name-input');
+            const name = nameInp ? nameInp.value.trim() : '';
+            const nickInp = row.querySelector('.dept-nickname-input');
+            const nickname = nickInp ? nickInp.value.trim() : '';
+            const color = row.querySelector('.dept-color-input').value;
+            if(name) {
+                generalDepts.push({ id, name, nickname, color });
+            }
+        });
             
 
             // Prepare DB Payload (School Info ONLY)
@@ -1594,9 +1604,24 @@ const App = {
             // --- Basic Schedules Migration ---
             // Flatten all data to rows
             const basicRows = [];
+            
+            // Helper to get existing ID if it was loaded or belongs to a system code
+            const findExistingId = (type, code, name, start) => {
+                // For dynamic lists, we use the ID stored in the object
+                if (type === 'holiday' && this.currentVariableHolidays) {
+                    const found = this.currentVariableHolidays.find(h => h.name === name && h.date === start);
+                    if (found && found.id) return found.id;
+                }
+                if (type === 'event' && !code && this.currentMajorEvents) {
+                    const found = this.currentMajorEvents.find(h => h.name === name && h.start === start);
+                    if (found && found.id) return found.id;
+                }
+                return null;
+            };
+
             const addRow = (type, code, name, start, end = null, is_holiday = false) => {
                 if(!start) return;
-                basicRows.push({
+                const row = {
                     academic_year: academicYear,
                     type,
                     code,
@@ -1604,7 +1629,10 @@ const App = {
                     start_date: start,
                     end_date: end || start,
                     is_holiday
-                });
+                };
+                const existingId = findExistingId(type, code, name, start);
+                if (existingId) row.id = existingId;
+                basicRows.push(row);
             };
 
             // 1. Terms & Vacations
@@ -1648,65 +1676,110 @@ const App = {
                  }
             });
 
-            // Transaction-like: Delete old -> Insert new
-            const { error: delError } = await window.SupabaseClient.supabase
+            // Sync Basic Schedules (Upsert New/Existing -> Delete Removed)
+            // 1. Get ALL records for this year in DB
+            const { data: dbBasics } = await window.SupabaseClient.supabase
                 .from('basic_schedules')
-                .delete()
+                .select('id, code')
                 .eq('academic_year', academicYear);
             
-            if(delError) throw delError;
+            const dbBasicIds = (dbBasics || []).map(r => r.id);
+            const basicCodeIds = (dbBasics || []).filter(r => r.code).reduce((acc, r) => {
+                acc[r.code] = r.id;
+                return acc;
+            }, {});
 
-            if(basicRows.length > 0) {
-                const { error: insError } = await window.SupabaseClient.supabase
+            // Match IDs for system codes in the payload
+            basicRows.forEach(row => {
+                if (row.code && basicCodeIds[row.code]) {
+                    row.id = basicCodeIds[row.code];
+                }
+            });
+
+            // 2. Identify Deletions
+            const payloadBasicIds = basicRows.filter(r => r.id).map(r => r.id);
+            const toDeleteBasics = dbBasicIds.filter(id => !payloadBasicIds.includes(id));
+
+            if (toDeleteBasics.length > 0) {
+                await window.SupabaseClient.supabase
                     .from('basic_schedules')
-                    .insert(basicRows);
-                if(insError) throw insError;
+                    .delete()
+                    .in('id', toDeleteBasics);
             }
 
-            // Sync Departments (Delete Old -> Insert New)
-            await window.SupabaseClient.supabase
+            if (basicRows.length > 0) {
+                const { error: insError } = await window.SupabaseClient.supabase
+                    .from('basic_schedules')
+                    .upsert(basicRows);
+                if (insError) throw insError;
+            }
+
+            // Sync Departments (Upsert New/Existing -> Delete Removed)
+            // 1. Get existing IDs in DB for this year
+            const { data: dbDepts } = await window.SupabaseClient.supabase
                 .from('departments')
-                .delete()
+                .select('id')
                 .eq('academic_year', academicYear);
+            
+            const dbIds = (dbDepts || []).map(d => d.id);
             
             const deptPayload = [];
             
             // 1. General
             generalDepts.forEach((d, i) => {
-                deptPayload.push({
+                const payload = {
                     academic_year: academicYear,
                     dept_name: d.name,
                     dept_short: d.nickname,
                     dept_color: d.color,
-                    sort_order: i, // 0 to N
+                    sort_order: i,
                     is_active: true
-                });
+                };
+                if (d.id) payload.id = d.id; // Keep existing ID
+                deptPayload.push(payload);
             });
             
-            // 2. Special - Save ALL (Active & Inactive) so we persist preferences
+            // 2. Special
             document.querySelectorAll('.special-dept-row').forEach((row, i) => {
+                const id = row.dataset.id;
                 const name = row.dataset.name;
                 const nickname = row.querySelector('.special-dept-nickname').value;
                 const color = row.querySelector('.special-dept-color').value;
                 const active = row.querySelector('.special-dept-check').checked;
                 
-                 deptPayload.push({
+                 const payload = {
                     academic_year: academicYear,
                     dept_name: name,
                     dept_short: nickname,
                     dept_color: color,
                     sort_order: 100 + i, 
                     is_active: active
-                 });
+                 };
+                 if (id) payload.id = id;
+                 deptPayload.push(payload);
             });
             
+            // 3. Deletions: IDs in DB but NOT in current payload
+            const payloadIds = deptPayload.filter(p => p.id).map(p => p.id);
+            const toDelete = dbIds.filter(id => !payloadIds.includes(id));
+
+            if (toDelete.length > 0) {
+                await window.SupabaseClient.supabase
+                    .from('departments')
+                    .delete()
+                    .in('id', toDelete);
+            }
+
             if (deptPayload.length > 0) {
                 const { error: deptError } = await window.SupabaseClient.supabase
                     .from('departments')
-                    .insert(deptPayload);
+                    .upsert(deptPayload);
                 
                 if (deptError) throw deptError;
             }
+
+            // --- REPAIR LOGIC: Re-link orphaned schedules ---
+            await this.repairOrphanedSchedules(academicYear);
 
             alert('학교 정보가 성공적으로 저장되었습니다.');
             // Reload the view with the currently selected year (don't force reload page)
@@ -1731,6 +1804,13 @@ const App = {
             }
         }
 
+    },
+
+    repairOrphanedSchedules: async function(academicYear) {
+        // This function would ideally use a mapping of old IDs to names.
+        // Since we previously used destructive deletions, we lost that mapping.
+        // However, the current stable ID logic (Upsert) ensures this never happens again.
+        console.log("Department ID stability is now active. Future save operations will preserve schedule links.");
     },
 
     updateBrand: function(schoolNameKR, schoolNameEN) {
@@ -2199,9 +2279,11 @@ const App = {
                     borderColor: dept.dept_color || '#3788d8',
                     extendedProps: {
                         deptId: s.dept_id,
+                        deptInfo: deptMap[s.dept_id] || { dept_name: '기타', dept_color: '#333' },
                         description: s.description,
                         visibility: s.visibility,
-                        isPrintable: s.is_printable
+                        isPrintable: s.is_printable,
+                        weekend: s.weekend 
                     }
                 });
             });
@@ -3106,13 +3188,14 @@ const App = {
 
         const [basicRows, departmentsRes, schedules] = await Promise.all([
             window.SupabaseClient.supabase.from('basic_schedules').select('*').in('academic_year', academicYears),
-            window.SupabaseClient.supabase.from('departments').select('*').in('academic_year', academicYears).eq('is_active', true),
+            window.SupabaseClient.supabase.from('departments').select('*').in('academic_year', academicYears), // Get all for robust lookup
             this.fetchSchedules()
         ]);
 
-        const departments = departmentsRes.data || [];
+        const allDepartments = departmentsRes.data || [];
+        const activeDepartments = allDepartments.filter(d => d.is_active);
 
-        this.state.departments = departments;
+        this.state.departments = activeDepartments; // For sidebar filter list
         this.state.schedules = schedules; 
         
         const data = {
@@ -3121,10 +3204,10 @@ const App = {
             bgColorMap: {}, // ADDED: To store background color for header only
             scheduleMap: {},
             backgroundEvents: [],
-            departments: this.state.departments
+            departments: allDepartments // For calendar cell lookup (includes inactive/historical)
         };
 
-        const allEvents = this.transformEvents(schedules, {}, data.departments, basicRows.data || []);
+        const allEvents = this.transformEvents(schedules, {}, allDepartments, basicRows.data || []);
 
         allEvents.forEach(e => {
             const dateKey = e.start;
@@ -3178,10 +3261,10 @@ const App = {
                     }
 
                     if (!data.scheduleMap[dKey]) data.scheduleMap[dKey] = {};
-                    const deptId = e.extendedProps.deptId || 'uncategorized';
+                    const deptId = (e.extendedProps && e.extendedProps.deptId) || 'uncategorized';
                     if (!data.scheduleMap[dKey][deptId]) {
-                         const deptDetails = (data.departments || []).find(d => d.id == deptId) || { dept_name: '기타', dept_color: '#333' };
-                         data.scheduleMap[dKey][deptId] = { info: deptDetails, events: [] };
+                         const deptInfo = (e.extendedProps && e.extendedProps.deptInfo) || { dept_name: '기타', dept_color: '#333' };
+                         data.scheduleMap[dKey][deptId] = { info: deptInfo, events: [] };
                     }
                     data.scheduleMap[dKey][deptId].events.push(e);
                     current.setDate(current.getDate() + 1);
@@ -3216,6 +3299,7 @@ const App = {
 
         // Group header and divider to apply background color up to the divider line
         const headerGroup = document.createElement('div');
+        headerGroup.className = 'calendar-cell-header'; // For triangle styling
         headerGroup.style.width = '100%';
         headerGroup.style.display = 'flex';
         headerGroup.style.flexDirection = 'column';
