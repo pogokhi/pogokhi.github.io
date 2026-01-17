@@ -292,6 +292,11 @@ html {
 }
 
 
+/* Default: Hide print-only header on screen */
+.print-only-header {
+    display: none;
+}
+
 @media print {
     /* Root visibility and height reset */
     html, body {
@@ -301,6 +306,22 @@ html {
         background-color: white !important;
         margin: 0 !important;
         padding: 0 !important;
+        counter-reset: page; /* Initialize page counter */
+    }
+
+    /* Page numbering footer */
+    body::after {
+        content: "- " counter(page) " -";
+        counter-increment: page;
+        position: fixed;
+        bottom: 5mm;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-size: 10pt;
+        color: #666;
+        z-index: 10000;
+        pointer-events: none;
     }
 
     #app, #main-content, #view-container, .flex-grow {
@@ -388,45 +409,44 @@ html {
     .fc {
         width: 100% !important;
         height: auto !important;
-        overflow: hidden !important; /* Crucial: Clips internal table corners for rounding */
+        overflow: visible !important; /* Changed from hidden to visible */
         max-width: 100% !important;
-        border: 1px solid #000 !important; /* Outermost frame */
-        border-radius: 12px !important; /* Rounded outer corners */
+        border: none !important; /* Removed outer border */
+        border-radius: 0 !important; /* Removed radius for print */
         background: white !important;
     }
 
     .fc-view-harness, 
     .fc-view-harness-active {
-        height: 100% !important;
+        height: auto !important; /* Changed from 100% to auto */
         min-height: 0 !important;
         overflow: visible !important;
         flex-grow: 1 !important;
     }
 
     .fc-scroller {
-        height: 100% !important; /* Force override 'auto' */
+        height: auto !important; /* Changed from 100% to auto */
         overflow: visible !important;
         position: relative !important;
         padding: 0 !important;
         margin: 0 !important;
-        flex-grow: 1 !important;
     }
 
     .fc-scroller-harness,
     .fc-scroller-harness-liquid {
-        height: 100% !important; /* Force harness to fill space */
+        height: auto !important; /* Changed from 100% to auto */
         width: 100% !important;
         overflow: visible !important;
         padding: 0 !important;
         margin: 0 !important;
-        flex-grow: 1 !important;
     }
 
-    /* Unified Print Reset: Nuclear Shadow Kill + Explicit Border Kill */
+    /* Unified Print Reset: Nuclear Shadow Kill + Explicit Border Kill + Straight Corners */
     *, ::before, ::after {
         box-shadow: none !important;
         filter: none !important;
         background-image: none !important;
+        border-radius: 0 !important;
     }
 
     /* Kill ALL internal FullCalendar borders by default */
@@ -444,7 +464,8 @@ html {
         table-layout: fixed !important;
         border-collapse: collapse !important;
         border-spacing: 0 !important;
-        border: none !important;
+        border: none !important; /* BACK TO NONE: Use cell borders only to prevent trailing lines */
+        border-radius: 0 !important;
         margin: 0 !important;
         padding: 0 !important;
     }
@@ -530,6 +551,27 @@ html {
     .fc-col-header-cell:not(:last-child),
     .fc-daygrid-day:not(:last-child) {
         border-right: 0.5pt solid #d1d5db !important;
+    }
+
+    /* RECONSTRUCT OUTER FRAME ON CELLS: Prevents lines in empty space and ensures corners meet */
+    /* Side Edges */
+    .fc-col-header-cell:first-child,
+    .fc-daygrid-day:first-child {
+        border-left: 1px solid #000 !important;
+    }
+    .fc-col-header-cell:last-child,
+    .fc-daygrid-day:last-child {
+        border-right: 1px solid #000 !important;
+    }
+    
+    /* Top Edge (Repeats on every page header) */
+    .fc-scrollgrid-section-header .fc-col-header-cell {
+        border-top: 1px solid #000 !important;
+    }
+
+    /* Bottom Edge (Closing line at the very end) */
+    .fc-daygrid-body tr:last-child .fc-daygrid-day {
+        border-bottom: 1px solid #000 !important;
     }
 
 
