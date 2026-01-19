@@ -2862,7 +2862,7 @@ const App = {
         this.renderDeptListView();
     },
 
-    renderDeptListView: async function () {
+    renderDeptListView: async function (customStart, customEnd) {
         const thead = document.getElementById('dept-view-thead');
         const tbody = document.getElementById('dept-view-tbody');
         const selYear = document.getElementById('dept-nav-year');
@@ -2879,14 +2879,19 @@ const App = {
 
         const activeDepts = (this.state.departments || []).filter(d => d.is_active);
         
+        // Determine Range
+        const startOfMonth = new Date(year, month, 1);
+        const endOfMonth = new Date(year, month + 1, 0);
+        
+        const finalStart = customStart ? new Date(customStart) : startOfMonth;
+        const finalEnd = customEnd ? new Date(customEnd) : endOfMonth;
+
         // Populate Print Header
         const printRange = document.getElementById('dept-print-range');
         const printSchool = document.getElementById('dept-print-school');
-        const startOfMonth = new Date(year, month, 1);
-        const endOfMonth = new Date(year, month + 1, 0);
 
         if (printRange) {
-            printRange.textContent = `${this.formatLocal(startOfMonth)} ~ ${this.formatLocal(endOfMonth)}`;
+            printRange.textContent = `${this.formatLocal(finalStart)} ~ ${this.formatLocal(finalEnd)}`;
         }
         if (printSchool) {
             const s = this.state.currentSettings;
@@ -2894,26 +2899,35 @@ const App = {
         }
         
         // 1. Header
-        let headerHtml = `<tr><th class="col-date" style="padding: 0 4px; vertical-align: middle; box-shadow: inset 0 -5px 0 #6b7280; height: 50px; font-size: 9pt;">날짜</th>`;
+        let headerHtml = `<tr><th class="col-date" style="padding: 0 4px; vertical-align: middle; box-shadow: inset 0 -5px 0 #6b7280; height: 50px;">날짜</th>`;
         activeDepts.forEach(d => {
             const color = d.dept_color || '#ccc';
+            const shortName = d.dept_short || d.dept_name.substring(0, 2);
             headerHtml += `
                 <th class="col-dept" style="padding: 0 4px; vertical-align: middle; box-shadow: inset 0 -5px 0 ${color}; height: 50px;">
-                    <div>${d.dept_name}</div>
+                    <div class="print:hidden">${d.dept_name}</div>
+                    <div class="hidden print:block">${shortName}</div>
                 </th>`;
         });
         headerHtml += `</tr>`;
         thead.innerHTML = headerHtml;
 
         // 2. Data
-        const startStr = this.formatLocal(startOfMonth);
-        const endStr = this.formatLocal(endOfMonth);
+        const startStr = this.formatLocal(finalStart);
+        const endStr = this.formatLocal(finalEnd);
 
-        const { data: schedules } = await window.SupabaseClient.supabase
+        let query = window.SupabaseClient.supabase
             .from('schedules')
             .select('*')
             .gte('start_date', startStr)
             .lte('start_date', endStr);
+
+        // Guest visibility filter
+        if (!this.state.user) {
+            query = query.eq('visibility', 'public');
+        }
+
+        const { data: schedules } = await query;
 
         const mm = month + 1;
         const ay = (mm < 3) ? year - 1 : year;
@@ -2921,10 +2935,13 @@ const App = {
 
         let bodyHtml = '';
         const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
-        for (let d = 1; d <= endOfMonth.getDate(); d++) {
-            const currDate = new Date(year, month, d);
-            const dateStr = this.formatLocal(currDate);
-            const dayNum = currDate.getDay();
+        
+        // Loop from finalStart to finalEnd
+        let curr = new Date(finalStart);
+        while (curr <= finalEnd) {
+            const d = curr.getDate();
+            const dateStr = this.formatLocal(curr);
+            const dayNum = curr.getDay();
             const holidayName = holidays[dateStr];
             
             let rowClass = '';
@@ -2944,6 +2961,8 @@ const App = {
                 bodyHtml += `</td>`;
             });
             bodyHtml += `</tr>`;
+            
+            curr.setDate(curr.getDate() + 1);
         }
         tbody.innerHTML = bodyHtml;
 
@@ -3005,9 +3024,14 @@ const App = {
 
     fetchSchedules: async function () {
         // Fetch all public schedules + visible internal ones
-        const { data, error } = await window.SupabaseClient.supabase
-            .from('schedules')
-            .select('*');
+        let query = window.SupabaseClient.supabase.from('schedules').select('*');
+        
+        // Guest visibility filter
+        if (!this.state.user) {
+            query = query.eq('visibility', 'public');
+        }
+
+        const { data, error } = await query;
 
         if (error) console.error('Error fetching schedules:', error);
         return data || [];
@@ -3589,6 +3613,41 @@ const App = {
                 if (orientSelect) orientSelect.value = 'landscape';
                 const sizeSelect = document.getElementById('print-size');
                 if (sizeSelect) sizeSelect.value = 'B4';
+
+                // [NEW] Range Selection Init
+                const rangeSection = document.getElementById('print-range-section');
+                if (rangeSection) rangeSection.classList.remove('hidden');
+
+                const monthSel = document.getElementById('print-dept-month');
+                if (monthSel) {
+                    const now = new Date();
+                    monthSel.innerHTML = '';
+                    for (let m = -2; m <= 6; m++) {
+                        const d = new Date(now.getFullYear(), now.getMonth() + m, 1);
+                        const opt = document.createElement('option');
+                        opt.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                        opt.textContent = `${d.getFullYear()}년 ${d.getMonth() + 1}월`;
+                        if (m === 0) opt.selected = true;
+                        monthSel.appendChild(opt);
+                    }
+                    
+                    const f2 = document.getElementById('print-dept-front2');
+                    const b2 = document.getElementById('print-dept-back2');
+                    
+                    const updateRange = () => {
+                        const [y, m] = monthSel.value.split('-').map(Number);
+                        const range = this.calculateDeptPrintRange(y, m, f2.checked, b2.checked);
+                        document.getElementById('print-start-date').value = range.start;
+                        document.getElementById('print-end-date').value = range.end;
+                    };
+
+                    monthSel.onchange = updateRange;
+                    f2.onchange = updateRange;
+                    b2.onchange = updateRange;
+
+                    // Initial calculation
+                    updateRange();
+                }
             }
         } catch (e) {
             console.error("Failed to load print modal", e);
@@ -3608,13 +3667,71 @@ const App = {
             // Fixed: Handle both Radio (checked) and Hidden input types
             const viewInput = document.querySelector('input[name="print-view"]:checked') || document.querySelector('input[name="print-view"]');
             const viewType = viewInput ? viewInput.value : 'calendar';
+        
+            const customStart = document.getElementById('print-start-date')?.value;
+            const customEnd = document.getElementById('print-end-date')?.value;
 
-            this.executePrint(size, orient, isScale, viewType);
+            this.executePrint(size, orient, isScale, viewType, customStart, customEnd);
         };
     },
 
-    executePrint: async function (size, orient, isScale, viewType) {
+    calculateDeptPrintRange: function (year, month, front2, back2) {
+        const startOfMonth = new Date(year, month - 1, 1);
+        const endOfMonth = new Date(year, month, 0);
+        const day15 = new Date(year, month - 1, 15);
+        const dayOf15 = day15.getDay(); // 0=Sun...
+
+        const getMonday = (d) => {
+            const date = new Date(d);
+            const day = date.getDay();
+            const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+            return new Date(date.setDate(diff));
+        };
+        const getSunday = (d) => {
+            const mon = getMonday(d);
+            return new Date(new Date(mon).setDate(mon.getDate() + 6));
+        };
+
+        let start, end;
+
+        if (front2 && back2) {
+            start = getMonday(startOfMonth);
+            end = getSunday(endOfMonth);
+        } else if (front2) {
+            start = getMonday(startOfMonth);
+            if (dayOf15 >= 4 && dayOf15 <= 6) { // Thu, Fri, Sat
+                end = getSunday(day15);
+            } else { // Sun, Mon, Tue, Wed
+                const prevSun = new Date(day15);
+                prevSun.setDate(day15.getDate() - dayOf15);
+                if (dayOf15 === 0) prevSun.setDate(day15.getDate() - 7);
+                end = prevSun;
+            }
+        } else if (back2) {
+            if (dayOf15 >= 4 && dayOf15 <= 6) { // Thu, Fri, Sat
+                const nextMon = new Date(getSunday(day15));
+                nextMon.setDate(nextMon.getDate() + 1);
+                start = nextMon;
+            } else { // Sun, Mon, Tue, Wed
+                start = getMonday(day15);
+            }
+            end = getSunday(endOfMonth);
+        } else {
+            start = startOfMonth;
+            end = endOfMonth;
+        }
+
+        return {
+            start: this.formatLocal(start),
+            end: this.formatLocal(end)
+        };
+    },
+
+    executePrint: async function (size, orient, isScale, viewType, customStart, customEnd) {
         this.closeModal();
+
+        // Store original state if custom range is used
+        const originalDate = this.state.deptViewDate;
 
         // 1. Fetch School Settings for Header (Mainly for Calendar view, but good to have)
         let schoolDisplayName = '';
@@ -3628,8 +3745,11 @@ const App = {
         }
 
         // 2. Prepare View
-        if (viewType === 'weekly_plan' || viewType === 'dept_list') {
-            // No need to change calendar view
+        if (viewType === 'dept_list' && customStart && customEnd) {
+            await this.renderDeptListView(customStart, customEnd);
+        } else if (viewType === 'weekly_plan' || viewType === 'dept_list') {
+            // Just render current month if no custom range but dept_list
+            if (viewType === 'dept_list') await this.renderDeptListView();
         } else if (this.state.calendar) {
             if (viewType === 'list') {
                 this.state.calendar.changeView('listMonth');
@@ -3686,10 +3806,14 @@ const App = {
             window.print();
         }, 1000);
 
-        const cleanup = () => {
+        const cleanup = async () => {
             body.className = previousClasses;
             if (styleEl) styleEl.remove();
             if (printHeader) printHeader.remove();
+
+            if (viewType === 'dept_list') {
+                await this.renderDeptListView(); // Restore original month view
+            }
 
             if (this.state.calendar && viewType !== 'weekly_plan' && viewType !== 'dept_list') {
                 this.state.calendar.setOption('height', '100%');
