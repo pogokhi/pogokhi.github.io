@@ -3058,10 +3058,16 @@ const App = {
             }
 
             bodyHtml += `<tr class="${rowClass}">`;
-            bodyHtml += `<td class="col-date">${d}<br><span class="text-[10px]">${dayNames[dayNum]}</span></td>`;
+            bodyHtml += `<td class="col-date">${d}<br class="print:hidden"><span class="text-[10px] print:text-inherit">(${dayNames[dayNum]})</span></td>`;
             activeDepts.forEach(dept => {
                 // 1. Get DB Schedules (Clone to allow injection)
-                let deptSchedules = (schedules || []).filter(s => s.dept_id === dept.id && s.start_date === dateStr);
+                // [FIX] 2-Step Matching: ID-based OR Name-based fallback for orphaned data
+                let deptSchedules = (schedules || []).filter(s => {
+                    if (s.start_date !== dateStr) return false;
+                    if (s.dept_id) return String(s.dept_id) == String(dept.id);
+                    // Fallback: match by name if ID is missing
+                    return s.dept_name === dept.dept_name || s.dept_name === dept.dept_short;
+                });
                 // Create a mutable copy if filter returns a new array anyway, but let's be explicit we treat it as mutable list
                 deptSchedules = [...deptSchedules];
 
@@ -3429,7 +3435,7 @@ const App = {
 
         // --- 3. Process Database Schedules (User created) ---
         const deptMap = {};
-        if (departments) departments.forEach(d => deptMap[d.id] = d);
+        if (departments) departments.forEach(d => deptMap[String(d.id)] = d);
 
         if (schedules) {
             schedules.forEach(s => {
@@ -3442,7 +3448,25 @@ const App = {
                 // GUEST VISIBILITY CHECK: Only show 'public'
                 if (!this.state.user && s.visibility !== 'public') return;
 
-                const dept = deptMap[s.dept_id] || {};
+                const deptIdKey = s.dept_id ? String(s.dept_id) : null;
+                const deptNameKey = s.dept_name;
+
+                // 2-Step Mapping: 1. By ID, 2. By Name (Fallback for orphaned data)
+                let dept = deptMap[deptIdKey] || (this.SPECIAL_DEPTS || []).find(sd => String(sd.id) == deptIdKey);
+                
+                if (!dept && deptNameKey) {
+                    // Search in regular departments by name or short name
+                    dept = (departments || []).find(d => d.dept_name === deptNameKey || d.dept_short === deptNameKey);
+                    // Search in special depts by name
+                    if (!dept) {
+                        dept = (this.SPECIAL_DEPTS || []).find(sd => sd.name === deptNameKey || sd.short_name === deptNameKey);
+                    }
+                }
+
+                // Final Fallback
+                if (!dept) dept = { dept_name: '기타', dept_color: '#333' };
+
+                const finalDeptId = dept.id ? String(dept.id) : 'uncategorized';
                 events.push({
                     id: s.id,
                     title: s.title,
@@ -3451,8 +3475,8 @@ const App = {
                     backgroundColor: dept.dept_color || '#3788d8',
                     borderColor: dept.dept_color || '#3788d8',
                     extendedProps: {
-                        deptId: s.dept_id,
-                        deptInfo: deptMap[s.dept_id] || { dept_name: '기타', dept_color: '#333' },
+                        deptId: finalDeptId,
+                        deptInfo: dept,
                         description: s.description,
                         visibility: s.visibility,
                         isPrintable: s.is_printable,
@@ -4690,21 +4714,103 @@ const App = {
                 return;
             }
 
-            const matches = (this.state.schedules || []).filter(s =>
-                s.title.toLowerCase().includes(query) ||
-                (s.description && s.description.toLowerCase().includes(query))
-            );
+            // 1. Merge Sources (Schedules + Basic Schedules + Fixed Env Events)
+            const activeAY = this.state.viewAcademicYear;
+            const envSource = [];
+            if (activeAY) {
+                Object.entries(this.FIXED_ENV_EVENTS).forEach(([mmdd, title]) => {
+                    const [m, d] = mmdd.split('-').map(Number);
+                    // Academic Year Y covers March Y to Feb Y+1
+                    const year = (m < 3) ? (activeAY + 1) : activeAY;
+                    const dateStr = `${year}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                    envSource.push({
+                        id: `env-${mmdd}`,
+                        title: title,
+                        start_date: dateStr,
+                        end_date: dateStr,
+                        academic_year: activeAY,
+                        isEnv: true
+                    });
+                });
+            }
+
+            const allSource = [
+                ...(this.state.schedules || []).map(s => {
+                    const deptIdKey = s.dept_id ? String(s.dept_id) : null;
+                    const deptNameKey = s.dept_name;
+
+                    // 2-Step Mapping: 1. By ID, 2. By Name
+                    let dept = (this.state.allDepartmentsCached || []).find(d => String(d.id) == deptIdKey);
+                    if (!dept) {
+                        dept = (this.SPECIAL_DEPTS || []).find(d => String(d.id) == deptIdKey);
+                    }
+                    
+                    if (!dept && deptNameKey) {
+                        dept = (this.state.allDepartmentsCached || []).find(d => d.dept_name === deptNameKey || d.dept_short === deptNameKey);
+                        if (!dept) {
+                            dept = (this.SPECIAL_DEPTS || []).find(sd => sd.name === deptNameKey || sd.short_name === deptNameKey);
+                        }
+                    }
+
+                    const deptName = dept ? (dept.dept_short || dept.short_name || dept.dept_name || dept.name) : '';
+                    const prefix = deptName ? `(${deptName}) ` : '';
+                    const suffix = s.description ? `(${s.description})` : '';
+                    return { ...s, title: `${prefix}${s.title}${suffix}`, isBasic: false };
+                }),
+                ...(this.state.basicSchedules || []).map(b => ({
+                    id: b.id,
+                    title: b.name || b.title,
+                    start_date: b.start_date,
+                    end_date: b.end_date,
+                    academic_year: b.academic_year,
+                    isBasic: true
+                })),
+                ...envSource
+            ];
+
+            // 2. Filter by Query AND Currently Viewed Academic Year
+            const matches = allSource.filter(s => {
+                // Determine Academic Year for normal schedules if not preset
+                let itemAY = s.academic_year;
+                if (!itemAY && s.start_date) {
+                    const d = new Date(s.start_date);
+                    const mm = d.getMonth() + 1;
+                    const y = d.getFullYear();
+                    itemAY = (mm < 3) ? y - 1 : y;
+                }
+
+                // Match academic year filter (Strictly scope to current view)
+                if (activeAY && itemAY !== activeAY) return false;
+
+                // Match search query
+                return s.title.toLowerCase().includes(query) ||
+                       (s.description && s.description.toLowerCase().includes(query));
+            }).sort((a, b) => {
+                // Primary: Start Date
+                if (a.start_date !== b.start_date) return a.start_date.localeCompare(b.start_date);
+                // Secondary: Title
+                return a.title.localeCompare(b.title);
+            });
 
             searchResults.classList.remove('hidden');
             if (matches.length === 0) {
                 searchResults.innerHTML = `<div class="text-gray-400 p-2 text-xs">검색 결과가 없습니다.</div>`;
             } else {
-                searchResults.innerHTML = matches.map(s => `
-                    <div class="cursor-pointer hover:bg-purple-50 p-2 rounded truncate border-b last:border-0" data-date="${s.start_date}" data-id="${s.id}">
-                        <div class="font-bold text-gray-700 text-xs">${s.title}</div>
-                        <div class="text-xs text-gray-500">${s.start_date}</div>
-                    </div>
-                `).join('');
+                searchResults.innerHTML = matches.map(s => {
+                    const isRange = s.end_date && s.end_date !== s.start_date;
+                    const dateDisplay = isRange ? `${s.start_date} ~ ${s.end_date}` : s.start_date;
+                    
+                    let typeTag = '';
+                    if (s.isBasic) typeTag = `<span class="bg-blue-50 text-blue-600 px-1 rounded mr-1">학사</span>`;
+                    else if (s.isEnv) typeTag = `<span class="bg-green-50 text-green-600 px-1 rounded mr-1">환경</span>`;
+                    
+                    return `
+                        <div class="cursor-pointer hover:bg-purple-50 p-2 rounded border-b last:border-0" data-date="${s.start_date}">
+                            <div class="font-bold text-gray-700 text-xs truncate">${typeTag}${s.title}</div>
+                            <div class="text-[10px] text-gray-500">${dateDisplay}</div>
+                        </div>
+                    `;
+                }).join('');
 
                 searchResults.querySelectorAll('div[data-date]').forEach(el => {
                     el.onclick = () => {
@@ -4733,15 +4839,26 @@ const App = {
 
         const [basicRows, departmentsRes, schedules] = await Promise.all([
             window.SupabaseClient.supabase.from('basic_schedules').select('*').in('academic_year', academicYears),
-            window.SupabaseClient.supabase.from('departments').select('*').in('academic_year', academicYears), // Get all for robust lookup
+            window.SupabaseClient.supabase.from('departments').select('*'), // Get ALL for robust lookup
             this.fetchSchedules()
         ]);
 
         const allDepartments = departmentsRes.data || [];
-        const activeDepartments = allDepartments.filter(d => d.is_active);
+        
+        // [SEARCH] Identify "Active" Academic Year for Scoping
+        const midDate = new Date(start.getTime() + (end.getTime() - start.getTime()) / 2);
+        const mm = midDate.getMonth() + 1;
+        const y = midDate.getFullYear();
+        const activeAY = (mm < 3) ? y - 1 : y;
+        this.state.viewAcademicYear = activeAY;
 
-        this.state.departments = activeDepartments; // For sidebar filter list
+        // For sidebar filter list: Only active departments of the CURRENTLY VIEWED academic year
+        const viewDepartments = allDepartments.filter(d => d.is_active && d.academic_year == activeAY);
+
+        this.state.allDepartmentsCached = allDepartments; // [SEARCH] Cache for lookup
+        this.state.departments = viewDepartments; // For sidebar filter list
         this.state.schedules = schedules;
+        this.state.basicSchedules = basicRows.data || []; // [SEARCH] Store for search
 
         const data = {
             holidayMap: {},

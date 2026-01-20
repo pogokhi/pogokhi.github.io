@@ -1108,6 +1108,10 @@ html {
         background-color: transparent !important; /* Prevent bleeding into border */
     }
 
+    #dept-view-table td.col-date {
+        font-size: 7pt !important;
+    }
+
     /* Force department color border in print - Keeping original colors */
     #dept-view-table thead th.col-dept {
         border-bottom: 5px solid !important; /* Original color line preserved */
