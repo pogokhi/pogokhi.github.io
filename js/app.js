@@ -109,6 +109,9 @@ const App = {
             // 2. Check Auth State
             await this.checkAuth();
 
+            // 2.5 Load Initial Settings (for Dynamic Title etc)
+            await this.fetchSettings();
+
             // 3. Routing & History Setup
             window.addEventListener('popstate', (event) => {
                 // Handle Back/Forward Button
@@ -3102,6 +3105,40 @@ const App = {
         if (wrapper) wrapper.scrollTop = 0;
     },
 
+    // --- UI Updates ---
+
+    updateHeaderTitle: function(settings) {
+        const titleEl = document.querySelector('#main-header h1');
+        if (!titleEl) return;
+
+        // Priority: name_en > school_name > 'GOE'
+        let baseName = 'GOE';
+        if (settings) {
+            if (settings.name_en) {
+                baseName = settings.name_en;
+            } else if (settings.school_name) {
+                baseName = settings.school_name;
+            }
+        }
+        
+        const newTitle = `${baseName}Link `;
+
+        // Update first text node to preserve the version span
+        let textNodeFound = false;
+        titleEl.childNodes.forEach(node => {
+            if (node.nodeType === 3 && node.textContent.includes('Link')) { // Node.TEXT_NODE
+                node.textContent = newTitle;
+                textNodeFound = true;
+            }
+        });
+
+        // Fallback if structure changed
+        if (!textNodeFound) {
+             const versionSpan = titleEl.querySelector('span')?.outerHTML || '<span class="text-xs font-normal text-gray-500 ml-1">v2.0</span>';
+             titleEl.innerHTML = `${newTitle}${versionSpan}`;
+        }
+    },
+
     // --- Data Fetching ---
 
     fetchSettings: async function (targetYear = null) {
@@ -3122,6 +3159,9 @@ const App = {
         }
 
         const result = settings || {};
+        
+        // [DYNAMIC TITLE] Update Header based on settings
+        this.updateHeaderTitle(result);
 
         // Fetch Basic Schedules (DB Refactor)
         if (result.academic_year) {
