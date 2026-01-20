@@ -1,0 +1,69 @@
+<div class="flex flex-col h-full min-h-0 gap-4">
+    <!-- Top Toolbar -->
+    <!-- Top Toolbar -->
+    <div class="flex items-center justify-between bg-white rounded-lg shadow p-3 no-print flex-shrink-0">
+        <!-- Main Container: Flex Col on Mobile, Row on Desktop -->
+        <div class="flex flex-col md:flex-row items-center gap-2 md:gap-4 w-full md:w-auto">
+            
+            <!-- Row 1 (Mobile): Title + Nav Buttons -->
+            <div class="flex items-center justify-between w-full md:w-auto md:justify-start gap-4">
+                <h2 class="text-lg font-bold text-gray-800 whitespace-nowrap" id="list-view-title">&nbsp;주간 계획서</h2>
+                
+                <!-- Nav Buttons Group -->
+                <div class="flex items-center gap-2">
+                    <button id="btn-list-prev" class="p-1 hover:bg-gray-100 rounded text-gray-600 transition flex justify-center items-center">
+                        <span class="material-symbols-outlined">chevron_left</span>
+                    </button>
+                    <button id="btn-list-today" class="px-3 py-1 text-sm border rounded hover:bg-gray-50 transition">오늘</button>
+                    <button id="btn-list-next" class="p-1 hover:bg-gray-100 rounded text-gray-600 transition flex justify-center items-center">
+                        <span class="material-symbols-outlined">chevron_right</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Row 2 (Mobile): Selects + Range + Toggle -->
+            <div class="flex items-center justify-between w-full md:w-auto gap-2 text-sm">
+                <!-- Dropdowns -->
+                <div class="flex items-center gap-1">
+                    <select id="list-nav-year" class="border rounded px-1 py-1 bg-white focus:ring-2 focus:ring-purple-500 outline-none">
+                        <!-- JS populated -->
+                    </select>
+                    <select id="list-nav-month" class="border rounded px-1 py-1 bg-white focus:ring-2 focus:ring-purple-500 outline-none">
+                        <!-- JS populated -->
+                    </select>
+                </div>
+                
+                <!-- Range -->
+                <div id="list-date-range" class="font-medium text-gray-600 whitespace-nowrap text-xs sm:text-sm"></div>
+                
+                <!-- Toggle -->
+                <div class="flex bg-gray-100 rounded p-0.5 shrink-0">
+                    <button id="btn-list-1week" class="px-2 py-0.5 text-xs font-medium rounded bg-white shadow text-gray-800">1주</button>
+                    <button id="btn-list-2weeks" class="px-2 py-0.5 text-xs font-medium rounded text-gray-500 hover:text-gray-900">2주</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex gap-2">
+            <button id="btn-list-calendar"
+                class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium py-1.5 px-3 rounded flex items-center gap-1 transition">
+                <span class="material-symbols-outlined text-sm">calendar_month</span> 달력
+            </button>
+            <button id="btn-list-print"
+                class="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium py-1.5 px-3 rounded flex items-center gap-1 transition">
+                <span class="material-symbols-outlined text-sm">print</span> 인쇄
+            </button>
+        </div>
+    </div>
+
+    <!-- List Container -->
+    <div class="flex-grow bg-white rounded-lg shadow p-8 min-h-0 overflow-y-auto" id="list-view-content-wrapper">
+        <!-- Printable Area -->
+        <div id="list-view-printable" class="max-w-4xl mx-auto">
+            <!-- Content -->
+            <div id="list-view-container" class="space-y-6">
+                <!-- Dynamic Content Injected Here -->
+            </div>
+        </div>
+    </div>
+</div>

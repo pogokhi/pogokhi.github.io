@@ -1,0 +1,59 @@
+<div class="flex flex-col h-full min-h-0 gap-4">
+    <!-- Top Toolbar -->
+    <div class="flex items-center justify-between bg-white rounded-lg shadow p-3 no-print flex-shrink-0">
+        <div class="flex items-center gap-4">
+            <h2 class="text-lg font-bold text-gray-800" id="dept-view-title">&nbsp;부서별 일정</h2>
+            <div class="flex items-center gap-2">
+                <button id="btn-dept-prev" class="p-1 hover:bg-gray-100 rounded text-gray-600 transition flex justify-center items-center">
+                    <span class="material-symbols-outlined">chevron_left</span>
+                </button>
+                <button id="btn-dept-today" class="px-3 py-1 text-sm border rounded hover:bg-gray-50 transition">오늘</button>
+                <button id="btn-dept-next" class="p-1 hover:bg-gray-100 rounded text-gray-600 transition flex justify-center items-center">
+                    <span class="material-symbols-outlined">chevron_right</span>
+                </button>
+                
+                <select id="dept-nav-year" class="ml-2 border rounded px-2 py-1 text-sm bg-white focus:ring-2 focus:ring-purple-500 outline-none">
+                    <!-- JS populated -->
+                </select>
+                <select id="dept-nav-month" class="border rounded px-2 py-1 text-sm bg-white focus:ring-2 focus:ring-purple-500 outline-none">
+                    <!-- JS populated -->
+                </select>
+            </div>
+        </div>
+
+        <div class="flex gap-2">
+            <button id="btn-dept-calendar"
+                class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium py-1.5 px-3 rounded flex items-center gap-1 transition"
+                onclick="window.App.navigate('calendar')">
+                <span class="material-symbols-outlined text-sm">calendar_month</span> 달력
+            </button>
+            <button id="btn-dept-print"
+                class="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium py-1.5 px-3 rounded flex items-center gap-1 transition">
+                <span class="material-symbols-outlined text-sm">print</span> 인쇄
+            </button>
+        </div>
+    </div>
+
+    <!-- Print Only Header -->
+    <div id="dept-print-header" class="hidden print:block text-center mb-4">
+        <h1 class="text-3xl font-bold border-b-2 border-black pb-4 mb-2">부서별 일정</h1>
+        <div class="flex justify-between items-end">
+            <div id="dept-print-range" class="text-[16px] font-bold"></div>
+            <div id="dept-print-school" class="text-[16px] font-bold"></div>
+        </div>
+    </div>
+
+    <!-- Dept Table Container -->
+    <div class="flex-grow bg-white rounded-lg shadow overflow-hidden flex flex-col min-h-0" id="dept-view-content-wrapper">
+        <div class="flex-grow overflow-auto relative" id="dept-view-table-scroll">
+            <table class="border-collapse table-fixed" id="dept-view-table">
+                <thead class="sticky top-0 z-30 bg-gray-50" id="dept-view-thead">
+                    <!-- Dynamic Header: 1st Col (Date, 50px), then Departments (150px each) -->
+                </thead>
+                <tbody id="dept-view-tbody">
+                    <!-- Dynamic Rows: Each Date has a row -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

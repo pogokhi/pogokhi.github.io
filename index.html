@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GOELink - GOE학교 일정관리</title>
+
+    <!-- Favicon -->
+    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+
+    <!-- 1. External Libraries (CDN) -->
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- FullCalendar (Core + Plugins) -->
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
+
+    <!-- SheetJS (Excel Import/Export) -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+
+    <!-- Korean Lunar Calendar Support -->
+    <script src="https://cdn.jsdelivr.net/npm/korean-lunar-calendar@0.3.6/dist/korean-lunar-calendar.min.js"></script>
+
+    <!-- Tailwind CSS (for rapid UI development, configured for production-like usage via script if needed, utilizing CDN for now) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#1D4ED8', // blue-700
+                        secondary: '#9333EA', // purple-600
+                        danger: '#DC2626', // red-600
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Google Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+
+    <!-- 2. Custom CSS -->
+    <link rel="stylesheet" href="css/styles.css?v=3.18">
+    <link rel="stylesheet" href="css/styles_mobile.css?v=3.18">
+
+    <!-- 3. App Scripts -->
+    <!-- Utils & Config -->
+    <script src="js/config.js?v=3.18"></script>
+    <script src="js/utils/supabase.js?v=3.18" defer></script>
+    <script src="js/utils/helpers.js?v=3.18" defer></script>
+
+    <!-- App Entry -->
+    <script src="js/app.js?v=3.18" defer></script>
+</head>
+
+<body class="bg-gray-50 text-gray-800 font-sans antialiased">
+
+    <!-- App Root Container -->
+    <div id="app" class="h-screen flex flex-col overflow-hidden">
+        <!-- Header / Navigation -->
+        <header id="main-header" class="bg-white shadow-sm z-50 flex-shrink-0 no-print">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-purple-600 text-3xl">calendar_month</span>
+                    <h1 class="text-xl font-bold tracking-tight text-gray-900">GOELink <span
+                            class="text-xs font-normal text-gray-500 ml-1">v2.0</span></h1>
+                </div>
+
+                <div id="auth-status" class="flex items-center gap-4">
+                    <!-- Dynamic Auth Content -->
+                    <button id="btn-login" class="text-sm font-medium text-gray-600 hover:text-gray-900">로그인</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main id="main-content" class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 overflow-y-auto flex flex-col">
+            <div id="loading-spinner" class="flex justify-center items-center h-64">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+            </div>
+
+            <!-- Views will be injected here -->
+            <div id="view-container" class="hidden flex-grow flex flex-col min-h-0"></div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="bg-white border-t border-gray-200 mt-auto no-print">
+            <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+                <p class="text-center text-xs text-gray-400">&copy; 2025-2026 GOELink. All rights reserved.</p>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Modals Container -->
+    <div id="modal-container" class="relative z-50 invisible"></div>
+
+</body>
+
+</html>

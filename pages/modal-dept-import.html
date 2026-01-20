@@ -1,0 +1,51 @@
+<div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-4 animate-fade-in">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-sm overflow-hidden transform transition-all scale-100">
+        <!-- Header -->
+        <div class="bg-purple-600 px-6 py-4 flex items-center justify-between">
+            <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                <span class="material-symbols-outlined">content_copy</span> 부서 정보 가져오기
+            </h3>
+            <button id="btn-dept-import-close" class="text-white hover:text-purple-200 transition">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+
+        <!-- Body -->
+        <div class="p-6 space-y-4">
+            <p class="text-sm text-gray-600">다른 학년도의 부서 정보를 현재 학년도로 복사해옵니다.</p>
+            
+            <div>
+                <label for="import-from-year" class="block text-xs font-bold text-gray-500 uppercase mb-1">가져올 학년도 (From)</label>
+                <select id="import-from-year" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white">
+                    <!-- Options populated by JS -->
+                </select>
+            </div>
+
+            <div class="flex justify-center">
+                <span class="material-symbols-outlined text-gray-300">arrow_downward</span>
+            </div>
+
+            <div>
+                <label for="import-to-year" class="block text-xs font-bold text-gray-500 uppercase mb-1">등록할 학년도 (To)</label>
+                <select id="import-to-year" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white">
+                    <!-- Options populated by JS -->
+                </select>
+            </div>
+            
+            <div id="import-status" class="hidden text-xs py-2 px-3 rounded bg-blue-50 text-blue-700">
+                 <!-- Status messages -->
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="bg-gray-50 px-6 py-4 flex justify-end gap-3 border-t">
+            <button id="btn-dept-import-cancel"
+                class="text-gray-600 hover:bg-gray-200 px-4 py-2 rounded font-medium text-sm transition">취소</button>
+            <button id="btn-dept-import-submit"
+                class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded font-bold shadow transition flex items-center gap-2 text-sm">
+                <span class="material-symbols-outlined text-sm">check_circle</span> 확인
+            </button>
+        </div>
+    </div>
+</div>

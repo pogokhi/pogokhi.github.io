@@ -1,0 +1,1180 @@
+﻿/* 
+  PogokLink Global Styles 
+  (Tailwind is used for utility, this file is for specific overrides and complex components)
+*/
+
+/* Font Family */
+body {
+    font-family: "Noto Sans KR", sans-serif;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+html {
+    height: 100%;
+}
+
+/* Ensure the app wrapper fills the screen */
+/* Ensure the app wrapper fills the screen but allows growth */
+#app,
+#view-container,
+#main-content,
+#form-container {
+    min-height: 100%;
+    /* Changed from height to min-height */
+    height: auto;
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+}
+
+@media screen {
+
+    html,
+    body {
+        height: 100vh;
+        overflow: hidden;
+        /* Prevent body scroll, use inner scroll */
+    }
+
+    #app {
+        height: 100%;
+        overflow: hidden;
+    }
+
+    /* Content wrapper: DISABLE SCROLL here, let FullCalendar handle it */
+    #main-content,
+    #view-container {
+        flex-grow: 1;
+        overflow: hidden !important;
+        /* Force hidden to contain interior scroll */
+        height: 100%;
+        min-height: 0;
+        display: flex;
+        /* Ensure FC fills it */
+        flex-direction: column;
+        padding: 4px !important;
+        /* Safety buffer to prevent border clipping at edges */
+    }
+
+    /* Force FullCalendar to use internal scroller by pinning height */
+    .fc {
+        height: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    /* Ensure the view harness takes up the remaining space */
+    .fc-view-harness {
+        flex-grow: 1 !important;
+        height: 100% !important;
+        min-height: 0 !important;
+    }
+
+    /* Target the grid scroller specifically to keep header fixed */
+    .fc .fc-scroller-harness {
+        flex-grow: 1 !important;
+        height: 100% !important;
+        min-height: 0 !important;
+    }
+
+    .fc .fc-scroller {
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        padding-bottom: 0 !important;
+        /* Reduced to minimize extra scroll amount */
+    }
+
+    /* Prevent the column header (weekdays) from scrolling */
+    .fc .fc-col-header-harness {
+        flex-shrink: 0 !important;
+    }
+}
+
+/* Calendar Overrides */
+.fc {
+    /* height: 100% !important; REMOVED: Allow auto height */
+    min-height: 100%;
+    display: flex !important;
+    flex-direction: column !important;
+    /* Removed card styles from here to exclude toolbar */
+    --fc-border-color: #e5e7eb;
+    /* gray-200 */
+    --fc-button-bg-color: #ffffff;
+    --fc-button-border-color: #d1d5db;
+    /* gray-300 */
+    --fc-button-text-color: #374151;
+    /* gray-700 */
+    --fc-button-hover-bg-color: #f3f4f6;
+    /* gray-50 */
+    --fc-button-hover-border-color: #9ca3af;
+    /* gray-400 */
+    --fc-button-active-bg-color: #e5e7eb;
+    /* gray-200 */
+    --fc-button-active-border-color: #6b7280;
+    /* gray-500 */
+    --fc-today-bg-color: #f5f3ff;
+    /* purple-100 (slightly more visible) */
+}
+
+/* Ensure all buttons (icons vs text) have equal height */
+.fc .fc-button {
+    height: 34px !important;
+    line-height: 1 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 12px !important;
+}
+
+/* Remove focus outline/shadow */
+.fc .fc-button:focus,
+.fc .fc-button:active,
+.fc .fc-button:focus-visible {
+    box-shadow: none !important;
+    outline: none !important;
+    border-color: var(--fc-border-color) !important;
+}
+
+/* Today Priority: Ensure today's color is always top priority */
+.fc .fc-day-today {
+    background-color: var(--fc-today-bg-color) !important;
+    z-index: 2 !important;
+    /* Above other day backgrounds */
+}
+
+/* Hide background events background color on today to let priority color show */
+.fc-day-today .holiday-bg-event,
+.fc-day-today .vacation-bg-event,
+.fc-day-today .event-exam-text,
+.fc-day-today .event-major-text {
+    background-color: transparent !important;
+}
+
+/* Apply rounded corners & shadow to the grid */
+.fc .fc-scrollgrid {
+    border-radius: 12px !important;
+    overflow: hidden !important;
+    /* Restore: Prevents background bleed at rounded corners */
+    height: 100% !important;
+    box-shadow:
+        0 4px 6px -1px rgba(0, 0, 0, 0.1),
+        0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    background: white;
+    /* ULTIMATE BORDER STABILITY: Separate model prevents collapse rendering errors */
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+    border: none !important;
+    border-top: 1px solid #d1d5db !important;
+    border-left: 1px solid #d1d5db !important;
+}
+
+/* Fundamental Border Fix: Unified grid lines using separate model */
+.fc .fc-daygrid-day,
+.fc .fc-col-header-cell {
+    border-right: 1px solid #d1d5db !important;
+    border-bottom: 1px solid #d1d5db !important;
+    border-top: none !important;
+    border-left: none !important;
+    box-shadow: none !important;
+}
+
+/* Week Expansion Control: Hide/Show specific buffer rows */
+#calendar:not(.show-prev-week) .fc-row-prev-buffer {
+    display: none !important;
+}
+
+#calendar:not(.show-next-week) .fc-row-next-buffer {
+    display: none !important;
+}
+
+/* Ensure all day cells in a row have equal height and fill the row */
+.fc-daygrid-day-frame {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+/* Hide the default events container to let custom content fill the height */
+.fc-daygrid-day-events {
+    min-height: 0 !important;
+}
+
+/* Ensure the main top container fills the frame */
+.fc-daygrid-day-top {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex-grow: 1 !important;
+}
+
+/* Gray background for days not in current month */
+/* Gray background removed as per request */
+.fc-day-other .fc-daygrid-day-frame {
+    background-color: transparent;
+}
+
+/* Calendar Header Styling: Unified row background to prevent gaps */
+.fc-scrollgrid-section-header,
+.fc-scrollgrid-section-header td,
+.fc-scrollgrid-section-header .fc-scroller-harness,
+.fc-scrollgrid-section-header .fc-scroller,
+.fc-col-header,
+.fc-col-header-cell,
+.fc-col-header-gutter {
+    background-color: #ede9fe !important;
+    /* purple-100 */
+}
+
+.fc-col-header-cell,
+.fc-col-header-gutter {
+    padding: 8px 0 !important;
+    border-top: none !important;
+    /* Grid provides top border */
+}
+
+/* Ensure gutter matches background and doesn't create extra borders */
+.fc-col-header-gutter {
+    border-right: none !important;
+    border-bottom: 1px solid #d1d5db !important;
+}
+
+/* Restore Rounded Corners specifically for the top header cells if they escape clipping */
+.fc-scrollgrid-section-header .fc-col-header-cell:first-child {
+    border-top-left-radius: 12px !important;
+}
+
+.fc-scrollgrid-section-header td:last-child {
+    border-top-right-radius: 12px !important;
+}
+
+/* Red Text for Sat/Sun Headers */
+.fc-col-header-cell.fc-day-sat,
+.fc-col-header-cell.fc-day-sun {
+    color: #dc2626 !important;
+    /* red-600 */
+}
+
+.fc .fc-toolbar-title {
+    font-size: 1.25rem;
+    /* text-xl */
+    font-weight: 700;
+}
+
+
+
+/* Ensure the calendar toolbar doesn't scroll */
+.fc-header-toolbar {
+    margin-bottom: 0.5rem !important;
+    padding: 2px 4px !important;
+}
+
+/* Event Styling */
+.fc-event {
+    cursor: pointer;
+    border: none;
+    padding: 1px 2px;
+    font-size: 0.85rem;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+/* Background Events (Holidays) */
+.holiday-bg-event {
+    background-color: transparent !important;
+    /* red-50 managed in JS headerRow */
+    border: none !important;
+    color: transparent !important;
+    /* Hide text in the middle */
+    opacity: 1 !important;
+    pointer-events: none;
+}
+
+/* Vacation Periods (Extremely light pink) */
+.vacation-bg-event {
+    background-color: transparent !important;
+    /* Managed in JS headerRow */
+    border: none !important;
+    color: transparent !important;
+    opacity: 1 !important;
+    pointer-events: none;
+}
+
+/* 
+   Calendar Customization for User Request 
+   - Red dates for Sat/Sun/Holidays
+   - 10px date font, BOLD
+   - 8px holiday name, Darker
+*/
+
+/* Date Number Font Size & Weight */
+.fc .fc-daygrid-day-number {
+    font-size: 10px !important;
+    padding: 0 !important;
+    /* Offset managed via headerGroup paddingTop in JS */
+    font-weight: 800 !important;
+    /* Extra Bold */
+    color: #1f2937;
+    /* gray-800 default */
+
+    /* Ensure the wrapper fills the entire cell height for sticky tracking */
+    display: flex !important;
+    flex-direction: column !important;
+    flex-grow: 1 !important;
+    height: 100% !important;
+    width: 100% !important;
+    text-decoration: none !important;
+}
+
+/* Red Dates for Sundays ("fc-day-sun"), Saturdays ("fc-day-sat"), and Holidays ("is-holiday") */
+.fc-day-sun .fc-daygrid-day-number,
+.fc-day-sat .fc-daygrid-day-number,
+.is-holiday .fc-daygrid-day-number {
+    color: #dc2626 !important;
+    /* text-red-600 (darker red) */
+}
+
+/* Holiday Name (injected via JS for Calendar top) */
+.fc-daygrid-day-top .holiday-name {
+    font-size: 8px !important;
+    color: #374151;
+    /* text-gray-700 */
+    font-weight: 700 !important;
+    margin-right: 4px;
+    display: inline-block;
+    /* Removed max-width truncation to show full text */
+}
+
+/* Ensure day top flex alignment */
+/* Ensure day top fills the cell for custom rendering */
+/* Already handled above, keeping here for specificity if needed */
+.fc-daygrid-day-top {
+    display: flex !important;
+    flex-direction: column !important;
+    flex-grow: 1 !important;
+    height: 100% !important;
+    width: 100% !important;
+    position: relative !important;
+    z-index: 5 !important;
+    min-height: 100% !important;
+    /* Force min-height */
+}
+
+/* Triangle indicator for days in the current month */
+.fc-daygrid-day:not(.fc-day-other):not(.is-other-month) .calendar-cell-header::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 10px 10px 0 0;
+    border-color: #6b7280 transparent transparent transparent;
+    /* Darker medium gray for workdays */
+    z-index: 10;
+}
+
+/* Red triangle for Sat/Sun/Holidays (only in current month) */
+.fc-day-sun:not(.fc-day-other):not(.is-other-month) .calendar-cell-header::before,
+.fc-day-sat:not(.fc-day-other):not(.is-other-month) .calendar-cell-header::before,
+.is-holiday:not(.fc-day-other):not(.is-other-month) .calendar-cell-header::before {
+    border-top-color: #dc2626 !important;
+}
+
+/* Ensure background events stay below */
+.fc-daygrid-day-bg {
+    z-index: 1 !important;
+}
+
+
+/* Default: Hide print-only header on screen */
+.print-only-header {
+    display: none;
+}
+
+@media print {
+
+    /* Root visibility and height reset */
+    body {
+        height: auto !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+        background-color: white !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    #list-view-printable {
+        overflow: hidden !important; /* Prevent tiny overflows from creating blank pages */
+    }
+
+
+    #app,
+    #main-content,
+    #view-container,
+    .flex-grow {
+        display: block !important;
+        height: auto !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    /* Prevent breaking inside a week row */
+    .fc-daygrid-body table tr {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+    }
+
+    /* Prevent breaking inside a single day cell */
+    .fc-daygrid-day-frame {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+    }
+
+    /* Force all FullCalendar scroll containers to be fully visible in print */
+    .fc-scroller,
+    .fc-scroller-liquid-absolute,
+    .fc-scroller-harness,
+    .fc-view-harness,
+    .fc-view-harness-active,
+    .fc-daygrid-body,
+    .fc-daygrid-body table,
+    .fc-scrollgrid-sync-table,
+    .fc-col-header-cell-cushion,
+    .fc-daygrid-day-frame,
+    .fc-daygrid-day-events,
+    .fc-daygrid-event-harness {
+        overflow: visible !important;
+        height: auto !important;
+        max-height: none !important;
+    }
+
+    /* Custom Print Header (Completely Independent Block) */
+    .print-only-header {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: baseline !important;
+        width: 100% !important;
+        margin-bottom: 20px !important;
+        padding: 10px 5mm !important;
+        /* Slight horizontal padding for safety */
+        border-bottom: 2px solid #000 !important;
+        box-sizing: border-box !important;
+        position: relative !important;
+        z-index: 9999 !important;
+    }
+
+    .print-header-left {
+        font-size: 24pt !important;
+        font-weight: bold !important;
+        color: #000 !important;
+    }
+
+    .print-header-right {
+        font-size: 16pt !important;
+        font-weight: normal !important;
+        color: #000 !important;
+    }
+
+    /* Hide Navigation Controls and original Header */
+    .no-print,
+    .fc-header-toolbar,
+    #sidebar,
+    header,
+    footer,
+    .print-controls,
+    .fc-footer-toolbar,
+    .fc-button-group,
+    .fc-today-button,
+    aside {
+        display: none !important;
+    }
+
+    /* Force FullCalendar content to be visible */
+    .fc {
+        width: 100% !important;
+        height: auto !important;
+        overflow: visible !important;
+        /* Changed from hidden to visible */
+        max-width: 100% !important;
+        border: none !important;
+        /* Removed outer border */
+        border-radius: 0 !important;
+        /* Removed radius for print */
+        background: white !important;
+    }
+
+    .fc-view-harness,
+    .fc-view-harness-active {
+        height: auto !important;
+        /* Changed from 100% to auto */
+        min-height: 0 !important;
+        overflow: visible !important;
+        flex-grow: 1 !important;
+    }
+
+    .fc-scroller {
+        height: auto !important;
+        /* Changed from 100% to auto */
+        overflow: visible !important;
+        position: relative !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .fc-scroller-harness,
+    .fc-scroller-harness-liquid {
+        height: auto !important;
+        /* Changed from 100% to auto */
+        width: 100% !important;
+        overflow: visible !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    /* Unified Print Reset: Nuclear Shadow Kill + Explicit Border Kill + Straight Corners */
+    *,
+    ::before,
+    ::after {
+        box-shadow: none !important;
+        filter: none !important;
+        background-image: none !important;
+        border-radius: 0 !important;
+    }
+
+    /* Kill ALL internal FullCalendar borders by default */
+    .fc * {
+        border: 0 none transparent !important;
+        border-width: 0 !important;
+        outline: none !important;
+        background: transparent !important;
+    }
+
+    /* Structural Table Reconstruction: Structure + Symmetry for Repeating Headers */
+    .fc .fc-scrollgrid {
+        display: table !important;
+        /* Critical for repeating headers */
+        width: 100% !important;
+        table-layout: fixed !important;
+        border-collapse: separate !important;
+        border-spacing: 0 !important;
+        border: none !important;
+        border-top: 1px solid #000 !important;
+        border-left: 1px solid #000 !important;
+        border-radius: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* Unwrap the tbody so rows become direct children of the table */
+    .fc .fc-scrollgrid tbody {
+        display: contents !important;
+    }
+
+    /* Target the Header Row for repetition on every page */
+    .fc-scrollgrid-section-header {
+        display: table-header-group !important;
+    }
+
+    /* Target the Body Rows (Weeks) */
+    .fc-scrollgrid-section-body {
+        display: table-row-group !important;
+        height: 100% !important;
+        /* Force body section to expand */
+    }
+
+    .fc-scrollgrid-section-body>td {
+        height: 100% !important;
+        /* Force body cell to expand */
+    }
+
+    /* Ensure internal tables also respect the fixed layout */
+    .fc .fc-scrollgrid table,
+    .fc-col-header,
+    .fc-daygrid-body,
+    .fc-daygrid-body table {
+        width: 100% !important;
+        table-layout: fixed !important;
+        border-collapse: collapse !important;
+        border-spacing: 0 !important;
+        border: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* Force Outer Border Only to 1px Solid Black */
+    .fc-scrollgrid {
+        border: none !important;
+        /* Cell-based border strategy */
+        border-collapse: collapse !important;
+    }
+
+    /* Force Absolute Equality: width 1px + table-layout fixed = perfect N-way split */
+    /* meaningful leaf cells only */
+    .fc .fc-scrollgrid table col,
+    .fc .fc-scrollgrid table th,
+    .fc .fc-scrollgrid table td,
+    .fc-col-header-cell,
+    .fc-daygrid-day {
+        width: 1px !important;
+        /* Forces mathematically equal distribution */
+        min-width: 0 !important;
+        max-width: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    /* UNCRUSH: Ensure the layout wrapper cells get full width */
+    .fc-scrollgrid-section>td {
+        width: 100% !important;
+        padding: 0 !important;
+        border: none !important;
+        display: table-row !important;
+        /* Acts as the row inside the header/row group */
+    }
+
+    /* The scroller harness becomes the cell instad */
+    /* CRITICAL: Ensure zero padding to fix header/body misalignment */
+    .fc-scrollgrid-section .fc-scroller-harness,
+    .fc-scroller {
+        display: table-cell !important;
+        width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    /* Kill surgical 'Gutter' cells only - KEEP header harness visible! */
+    .fc-col-header-gutter,
+    .fc-daygrid-day-gutter,
+    .fc-scrollgrid-section-footer .fc-scroller-harness,
+    .fc-resource-group-gutter {
+        display: none !important;
+        width: 0 !important;
+        visibility: hidden !important;
+    }
+
+    /* UNIFIED BORDER RULE: Valid for ALL cells */
+    /* This creates the full grid + outer frame automatically via collapse */
+    .fc-col-header-cell,
+    .fc-daygrid-day {
+        border: 1px solid #000 !important;
+    }
+
+    /* Explicitly Enforce Right Edge on Last Visible Column */
+    /* (Corrects issue where right edge appears faint or missing) */
+    .fc-col-header-cell:last-child,
+    .fc-daygrid-day:last-child {
+        border-right: 1px solid #000 !important;
+    }
+
+    /* Explicitly Enforce Right Edge on Last Visible Column */
+    /* (Corrects issue where right edge appears faint or missing) */
+    .fc-col-header-cell:last-child,
+    .fc-daygrid-day:last-child {
+        border-right: 1px solid #000 !important;
+    }
+
+    /* REMOVED: All redundant directional overrides (Left/Right/Top) */
+    /* The generic rule above now handles all sides of all cells. */
+
+    /* Bottom Edge cleanup */
+    .fc-daygrid-body tr:last-child .fc-daygrid-day {
+        border-bottom: 1px solid #000 !important;
+    }
+
+
+    /* Selective Restore: Custom Dash Divider (Restore visibility) */
+    .calendar-dashed-divider {
+        border-top: 1px dashed #d1d5db !important;
+        display: block !important;
+        visibility: visible !important;
+        margin: 1px 8px 0px 8px !important;
+    }
+
+    .fc-daygrid-day {
+        height: auto !important;
+        padding: 0 !important;
+        /* Preclude content-based width shifts */
+    }
+
+    .fc-daygrid-day-frame {
+        min-height: 100px !important;
+        height: auto !important;
+        overflow: visible !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Hide the horizontal scrollbar gutter that FullCalendar often injects */
+    .fc-scroller-harness,
+    .fc-scroller-harness-liquid {
+        width: 100% !important;
+        overflow: visible !important;
+    }
+
+    /* Disable sticky behaviors for print */
+    .calendar-cell-header {
+        position: static !important;
+        width: 100% !important;
+    }
+
+    /* Remove Scrollbars */
+    .fc-scroller::-webkit-scrollbar {
+        display: none;
+    }
+
+    /* Reduce scale slightly for better fit */
+    body.print-scale .fc {
+        font-size: 0.75rem;
+    }
+
+    /* CRITICAL: Unlock header overflow to prevent text clipping in table-header-group */
+    .fc-scrollgrid-section-header .fc-scroller,
+    .fc-scrollgrid-section-header .fc-scroller-harness {
+        overflow: visible !important;
+        height: auto !important;
+        display: block !important;
+        /* Ensure it takes space inside the th */
+    }
+
+    /* Ensure text is explicitly black and visible */
+    .fc-col-header-cell a {
+        color: #000 !important;
+        text-decoration: none !important;
+        visibility: visible !important;
+    }
+
+    /* Explicitly Enforce Black Borders on All Grid Cells */
+    .fc-theme-standard td,
+    .fc-theme-standard th,
+    .fc-scrollgrid {
+        border: 1px solid #000 !important;
+    }
+
+    /* Week Expansion Control for Print: explicit override required */
+    #calendar:not(.show-prev-week) .fc-row-prev-buffer {
+        display: none !important;
+    }
+
+    #calendar:not(.show-next-week) .fc-row-next-buffer {
+        display: none !important;
+    }
+
+    #calendar.show-prev-week .fc-row-prev-buffer {
+        display: table-row !important;
+    }
+
+    #calendar.show-next-week .fc-row-next-buffer {
+        display: table-row !important;
+    }
+
+    /* Fix Bottom Border when Next Week Buffer is Hidden */
+    /* The 2nd to last row becomes the visual bottom, so it needs a border */
+    #calendar:not(.show-next-week) .fc-daygrid-body tr:nth-last-child(2) .fc-daygrid-day {
+        border-bottom: 1px solid #000 !important;
+    }
+
+}
+
+/* Custom Scrollbar Styling (Thinner) */
+.fc-scroller {
+    scrollbar-width: thin;
+    /* Firefox */
+    scrollbar-color: #d1d5db transparent;
+    /* Firefox */
+}
+
+/* Hide redundant scrollbar in the header row - BUT NOT IN PRINT */
+.fc-scrollgrid-section-header .fc-scroller {
+    overflow: hidden !important;
+}
+
+@media print {
+    .fc-scrollgrid-section-header .fc-scroller {
+        overflow: visible !important;
+    }
+}
+
+.fc-scroller::-webkit-scrollbar {
+    width: 6px;
+    /* Thinner vertical scrollbar */
+    height: 6px;
+    /* Thinner horizontal scrollbar */
+}
+
+.fc-scroller::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.fc-scroller::-webkit-scrollbar-thumb {
+    background-color: #d1d5db;
+    /* gray-300 */
+    border-radius: 20px;
+    border: 1px solid transparent;
+}
+
+.fc-scroller::-webkit-scrollbar-thumb:hover {
+    background-color: #9ca3af;
+    /* gray-400 */
+}
+
+/* Dim styling for non-current month dates */
+.fc-day.is-other-month .fc-daygrid-day-number,
+.fc-day.is-other-month .holiday-name,
+.fc-day.is-other-month .schedule-item,
+.fc-day.is-other-month .schedule-item span,
+.fc-day.is-other-month .dept-header,
+.fc-day.is-other-month .dept-header span {
+    color: #9ca3af !important;
+    /* gray-400 */
+}
+/* --- List View Styles --- */
+
+.list-day-block {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    margin-bottom: 50px;
+}
+
+.list-dept-group {
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+#list-view-content-wrapper {
+    scrollbar-gutter: stable;
+}
+
+/* Print Specific for List View */
+@media print {
+    #list-view-content-wrapper {
+        overflow: visible !important;
+        height: auto !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+    }
+
+    #list-view-printable {
+        max-width: 100% !important;
+        width: 100% !important;
+    }
+    
+
+    .list-day-block {
+        border: none;
+        margin-bottom: 50px;
+        break-inside: avoid;
+    }
+
+    /* 2-Week Column Support (Hard Split) */
+    .grid-cols-1.print\:grid-cols-2 {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 2rem !important;
+    }
+
+
+    /* 1-Week Column Support (Flow) */
+    .list-1week-print-cols {
+        column-count: 2 !important;
+        column-gap: 2rem !important;
+        width: 100% !important;
+        column-fill: auto !important; /* USER REQUEST: Fill Col 1 first to use more space */
+    }
+
+    /* Space optimization */
+    #list-view-container {
+        gap: 0 !important;
+        margin: 0 !important;
+    }
+
+    /* Paper Specific Heights to guide 'column-fill: auto' */
+    /* Further reduced heights (approx -10mm) to be perfectly safe against manual header overflows */
+    .print-a4 .list-1week-print-cols { height: 200mm !important; }
+    .print-b4 .list-1week-print-cols { height: 265mm !important; }
+    .print-a3 .list-1week-print-cols { height: 335mm !important; }
+
+    /* Paper Specific Max-Widths */
+    .print-a4 #list-view-printable { max-width: 190mm !important; }
+    .print-b4 #list-view-printable { max-width: 230mm !important; }
+    .print-a3 #list-view-printable { max-width: 277mm !important; }
+
+    .list-day-block {
+        margin-bottom: 24px !important;
+        break-inside: avoid;
+    }
+}
+
+/* --- Dept List View Table --- */
+#dept-view-table {
+    border-spacing: 0;
+    min-width: 100%;
+}
+
+#dept-view-table th,
+#dept-view-table td {
+    border: 1px solid #e5e7eb;
+    padding: 6px;
+    height: 50px;
+    vertical-align: top;
+    font-size: 0.875rem;
+}
+
+/* Date Column (Sticky) */
+#dept-view-table .col-date {
+    width: 50px;
+    min-width: 50px;
+    position: sticky;
+    left: 0;
+    z-index: 20;
+    background-color: #f9fafb;
+    text-align: center;
+    font-weight: bold;
+    border-right: 2px solid #d1d5db; /* Stronger divide */
+}
+
+/* Department Column */
+#dept-view-table .col-dept {
+    width: 150px;
+    min-width: 150px;
+    background-color: #fff;
+}
+
+/* Header Cells (Sticky) */
+#dept-view-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background-color: #f3f4f6;
+    color: #374151;
+    font-weight: 700;
+    text-align: center;
+    vertical-align: middle;
+    box-shadow: inset 0 -1px 0 #e5e7eb; /* Keep internal border visible if needed */
+    font-size: 14px !important; /* Unified header font size for screen (aligned with dept names) */
+}
+
+#dept-view-table thead .col-date {
+    z-index: 40; /* Higher than other header cells */
+    left: 0;
+}
+
+/* Special Days */
+#dept-view-table tr.row-sunday { background-color: #fef2f2; }
+#dept-view-table tr.row-saturday { background-color: #eff6ff; }
+/* Final Solution: Gradient Background Divider (Bypasses border collapse & z-index issues) */
+/* Sunday: Draw 1px black line at the BOTTOM using background gradient */
+#dept-view-table tr.row-sunday td,
+#dept-view-table tr.row-sunday th,
+#dept-view-table tr.row-sunday .col-date {
+    background-image: linear-gradient(to top, #000000 1px, transparent 1px) !important;
+    background-size: 100% 100% !important;
+    background-repeat: no-repeat !important;
+    border-bottom: none !important; /* Visual cleanup */
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+}
+
+/* Monday: Draw 1px black line at the TOP using background gradient */
+#dept-view-table tr.row-monday td,
+#dept-view-table tr.row-monday th,
+#dept-view-table tr.row-monday .col-date,
+#dept-view-table tr.row-sunday + tr td,
+#dept-view-table tr.row-sunday + tr th,
+#dept-view-table tr.row-sunday + tr .col-date {
+    background-image: linear-gradient(to bottom, #000000 1px, transparent 1px) !important;
+    background-size: 100% 100% !important;
+    background-repeat: no-repeat !important;
+    border-top: none !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+}
+
+#dept-view-table tr.row-sunday .col-date { 
+    color: #ef4444; 
+    background-color: #fef2f2; 
+}
+/* No need to re-declare background/borders for .col-date as they are included above */
+#dept-view-table tr.row-saturday .col-date { color: #3b82f6; background-color: #eff6ff; }
+#dept-view-table tr.row-holiday .col-date { color: #e11d48; background-color: #fff1f2; }
+
+/* Event Item inside cell */
+.dept-event-item {
+    font-size: 0.75rem;
+    padding: 2px 4px;
+    margin-bottom: 5px;
+    border-radius: 4px;
+    background-color: #f3f4f6;
+    border-left: 3px solid #9ca3af;
+    color: #374151;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: normal;
+    line-height: 1.2;
+}
+
+/* Print specific for Dept View */
+@media print {
+    @page {
+        size: B4 landscape;
+        margin: 10mm !important; /* Uniform margins */
+    }
+
+    html, body {
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow-x: hidden !important;
+        font-size: 12pt !important; /* Base font size for print */
+    }
+
+    body {
+        height: auto !important;
+        overflow: visible !important;
+        background-color: white !important;
+    }
+
+    /* Hide global elements */
+    #main-header, footer, .no-print, #dept-print-footer, #dept-view-table tfoot {
+        display: none !important;
+        height: 0 !important;
+        border: none !important;
+    }
+
+    #dept-print-header,
+    #dept-view-content-wrapper {
+        width: calc(100% - 3mm) !important;
+        margin-left: 0 !important;
+        margin-right: 3mm !important;
+    }
+
+    #dept-view-table-scroll {
+        overflow: visible !important;
+        height: auto !important;
+        width: 100% !important; /* Reset nested width to fill the wrapper */
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    #dept-view-table {
+        table-layout: fixed !important; 
+        width: 100% !important;
+        max-width: 100% !important;
+        border-collapse: collapse !important;
+        border: 1px solid #6b7280 !important; /* Unified outer border */
+        margin: 0 !important;
+        background-color: transparent !important;
+    }
+
+    /* Column Widths for Print */
+    #dept-view-table .col-date {
+        width: 35px !important; /* Reduced to gain ~3mm of space */
+    }
+    
+    #dept-view-table .col-dept {
+        width: auto !important; /* Equal distribution of remaining space */
+    }
+
+    #dept-view-table thead {
+        display: table-header-group !important;
+        position: static !important;
+    }
+
+    #dept-view-table thead,
+    #dept-view-table thead tr,
+    #dept-view-tbody,
+    #dept-view-tbody tr {
+        border: none !important;
+        background: transparent !important;
+        position: static !important;
+    }
+
+    #dept-view-table td,
+    #dept-view-table th,
+    #dept-view-table thead th,
+    #dept-view-table .col-date,
+    #dept-view-table .col-dept {
+        box-sizing: border-box !important;
+        border: 1px solid #6b7280 !important; /* Absolute 1px partition line */
+        font-size: 11pt !important;
+        position: static !important;
+        box-shadow: none !important;
+        outline: none !important;
+        background-color: transparent !important; /* Prevent bleeding into border */
+    }
+
+    /* Force department color border in print - Keeping original colors */
+    #dept-view-table thead th.col-dept {
+        border-bottom: 5px solid !important; /* Original color line preserved */
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        vertical-align: middle !important;
+        font-size: 14px !important; 
+    }
+
+    #dept-view-table thead th.col-date {
+        border-bottom: 5px solid #6b7280 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        vertical-align: middle !important;
+        font-size: 9px !important; /* ?좎쭨 ?몄뇙 ?ш린: 9px */
+    }
+
+    #dept-view-table tr {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        background-color: transparent !important; /* Reset stripe/holiday colors for clean lines */
+        border: none !important;
+    }
+
+    .dept-event-item {
+        font-size: 7pt !important;
+    }
+
+    /* Remove ANY parent styling that could double up borders */
+    #dept-view-content-wrapper,
+    #dept-view-table-scroll {
+        border: none !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+}
+
+/* Mobile Calendar Horizontal Scroll */
+@media screen and (max-width: 768px) {
+    /* Unlock wrapper horizontal scroll (Syncs Header & Body) */
+    .fc-view-harness {
+        overflow-x: auto !important;
+        scroll-snap-type: x mandatory;
+    }
+
+    /* Force Table to Expand */
+    .fc .fc-scrollgrid,
+    .fc .fc-scrollgrid table {
+        width: auto !important;
+        min-width: 100% !important;
+    }
+
+    /* Cell Widths (3 days visible) */
+    .fc-col-header-cell,
+    .fc-daygrid-day {
+        min-width: 33.33vw !important;
+        max-width: 33.33vw !important;
+        flex: 0 0 33.33vw !important;
+        scroll-snap-align: start;
+    }
+
+    /* Disable internal horizontal scrollbars */
+    .fc-scroller {
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+    }
+}

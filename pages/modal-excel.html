@@ -1,0 +1,72 @@
+<div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-4 animate-fade-in">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-lg overflow-hidden transform transition-all scale-100">
+        <!-- Header -->
+        <div class="bg-green-600 px-6 py-4 flex items-center justify-between">
+            <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                <span class="material-symbols-outlined">table_view</span> 엑셀 일괄 업로드
+            </h3>
+            <button id="btn-excel-close" class="text-white hover:text-green-200 transition">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+
+        <!-- Body -->
+        <div class="p-6 space-y-6">
+            <!-- 0. Academic Year Selection -->
+            <div>
+                <label for="excel-year-select" class="block text-sm font-bold text-gray-700 mb-1">대상 학년도</label>
+                <select id="excel-year-select" class="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 bg-white">
+                    <!-- Options populated by JS -->
+                </select>
+                <p class="text-xs text-gray-500 mt-1">선택한 학년도로 일정이 등록됩니다.</p>
+            </div>
+
+            <!-- 1. Download Template -->
+            <div class="bg-gray-50 p-4 rounded border border-gray-200">
+                <h4 class="font-bold text-gray-700 mb-2">1단계: 양식 다운로드</h4>
+                <p class="text-sm text-gray-600 mb-3">아래 버튼을 눌러 엑셀 양식을 다운로드하세요. 양식에 맞춰 일정을 입력해야 합니다.</p>
+                <button id="btn-download-template"
+                    class="text-sm bg-white border border-gray-300 text-gray-700 px-3 py-1.5 rounded hover:bg-gray-100 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-sm">download</span> 양식 다운로드 (xlsx)
+                </button>
+            </div>
+
+            <!-- 2. Upload File -->
+            <div>
+                <h4 class="font-bold text-gray-700 mb-2">2단계: 파일 업로드</h4>
+                <div class="flex items-center justify-center w-full">
+                    <label for="excel-file-input"
+                        class="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
+                        <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                            <span class="material-symbols-outlined text-gray-400 text-3xl mb-2">upload_file</span>
+                            <p class="mb-2 text-sm text-gray-500"><span class="font-semibold">클릭하여 파일 선택</span></p>
+                            <p class="text-xs text-gray-500">XLS 또는 XLSX 파일</p>
+                        </div>
+                        <input id="excel-file-input" type="file" class="hidden" accept=".xlsx, .xls" />
+                    </label>
+                </div>
+                <p id="excel-file-name" class="text-sm text-center mt-2 text-green-600 font-medium"></p>
+            </div>
+
+            <!-- Preview / Status -->
+            <div id="upload-status-area" class="hidden">
+                <div class="text-sm">
+                    <p>총 <span id="preview-count" class="font-bold">0</span>건의 일정이 발견되었습니다.</p>
+                    <ul id="preview-error-list"
+                        class="mt-2 text-red-500 list-disc list-inside max-h-24 overflow-y-auto text-xs hidden"></ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="bg-gray-50 px-6 py-4 flex justify-end gap-3 border-t">
+            <button id="btn-excel-cancel"
+                class="text-gray-600 hover:bg-gray-200 px-4 py-2 rounded font-medium transition">취소</button>
+            <button id="btn-upload-submit" disabled
+                class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded font-bold shadow transition flex items-center gap-2 disabled:bg-gray-300 disabled:cursor-not-allowed">
+                <span class="material-symbols-outlined text-sm">cloud_upload</span> 업로드
+            </button>
+        </div>
+    </div>
+</div>

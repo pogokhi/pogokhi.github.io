@@ -1,0 +1,280 @@
+/* 
+  PogokLink Mobile-Specific Styles 
+  Only active for screens <= 1024px or touch devices.
+*/
+
+/* 1. Hide Print Feature on Mobile/Tablet */
+/* Detect touch devices (Smartphones/Tablets) or small screens */
+@media screen and (max-width: 1024px), (pointer: coarse) {
+    #btn-print-modal, 
+    #btn-print-direct, 
+    .no-mobile-print,
+    #btn-print-modal, 
+    #btn-print-direct,
+    #btn-dept-print, /* Hide dept print button */
+    #btn-list-print, /* Hide list print button */
+    .no-mobile-print,
+    .btn-print {
+        display: none !important;
+    }
+}
+
+@media screen and (max-width: 768px) {
+    /* 2. Global Layout Adjustments */
+    #main-content {
+        padding: 8px 4px !important; /* Narrower padding for small screens */
+    }
+
+    /* 3. Dept List View Optimization */
+    /* Target the toolbar container specifically */
+    /* Structure: div.flex.items-center.justify-between > [LeftGroup(Title, Nav)] + [RightGroup(Calendar, Print)] */
+    /* We use :has() selector or robust child targeting if possible, but simpler is to assume structure */
+    
+    /* 3. Dept List View Optimization */
+    /* Target the toolbar container specifically */
+    
+    #dept-view-title {
+        white-space: nowrap !important;
+    }
+
+    /* Styles for the Dept Toolbar on Mobile */
+    h2#dept-view-title {
+        font-size: 0.95rem !important; /* Restored to previous size */
+        margin-right: auto !important; /* Push Nav to the right */
+        text-align: left !important;
+    }
+
+    /* Left Group Container (Title + Nav) - Now THE layout */
+    div:has(> #dept-view-title) {
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        align-items: center !important;
+        gap: 2px !important; 
+        width: 100% !important;
+        overflow: hidden !important; /* Hide scrollbars/arrows */
+    }
+
+    /* Main Container Flex adjustments */
+    div:has(> div > #dept-view-title) {
+        padding: 7px 7px !important; /* Increased horizontal padding (+3px) -> 7px 7px */
+        gap: 0 !important;
+        display: block !important; 
+    }
+
+    /* 1. Title: Row 1 Left */
+    /* Handled by margin-right: auto on #dept-view-title */
+
+    /* 2. Nav Group (Buttons + Selects): Right of Title */
+    #dept-view-title + div {
+        display: flex !important;
+        align-items: center !important;
+        gap: 4px !important; /* Reduced button gap but kept readable */
+        margin-left: 0 !important;
+        justify-content: flex-end !important; /* Align content to right */
+    }
+
+    /* Nav Buttons Compact */
+    #btn-dept-prev, #btn-dept-next {
+        padding: 0 !important;
+        width: 20px !important;
+        height: 24px !important;
+    }
+    
+    #btn-dept-today {
+        padding: 0 4px !important;
+        height: 24px !important;
+        font-size: 0.8rem !important;
+        line-height: 22px !important;
+    }
+
+    /* Dropdowns Compact */
+    #dept-nav-year, #dept-nav-month {
+        padding: 0 2px !important;
+        height: 24px !important;
+        font-size: 0.8rem !important;
+        background-position: right 2px center !important;
+    }
+
+    /* 2. Header Auth (Status) */
+    #auth-status {
+        gap: 6px !important;
+    }
+
+    /* 3. Calendar Button (Dept & List): MOVED TO HEADER (Fixed Position) */
+    #btn-dept-calendar, #btn-list-calendar {
+        position: fixed !important;
+        top: 10px !important; /* MATCHING ALIGNMENT: Header Pad(8px) + FlexCenterOffset(2px) = 10px */
+        right: 84px !important; /* 16px(Pad) + 62px(Logout) + 6px(Gap) */
+        z-index: 50 !important;
+        height: 24px !important;
+        padding: 0 6px !important;
+        font-size: 0.75rem !important;
+        background-color: white !important;
+        border: 1px solid #d1d5db !important;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important;
+        height: 24px !important;
+        display: flex !important;
+        align-items: center !important;
+    }
+    
+    #btn-dept-calendar .material-symbols-outlined, #btn-list-calendar .material-symbols-outlined {
+        font-size: 16px !important;
+    }
+
+    /* 4. Auth Buttons Compact (Mobile) */
+    #btn-admin, #btn-logout, #btn-login {
+        height: 24px !important;
+        padding: 0 6px !important;
+        font-size: 0.75rem !important;
+        line-height: 22px !important;
+        display: flex !important;
+        align-items: center !important;
+    }
+    
+    /* Dynamic Admin Margin */
+    .view-has-calendar-btn #btn-admin {
+        margin-right: 70px !important; /* Space for Fixed Calendar Btn (60px) + Gap (6px) + Buffer */
+    }
+
+    #btn-admin {
+        margin-left: 4px !important;
+        margin-right: 0 !important; /* Default: no extra margin */
+    }
+
+    /* Hide the original container hole if needed */
+    div:has(> #btn-dept-calendar), div:has(> #btn-list-calendar) {
+        width: 0 !important;
+        height: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        overflow: visible !important;
+    }
+
+    /* 3. Dept List View Optimization */
+    #dept-view-content-wrapper {
+        border-radius: 4px !important;
+        overflow-x: auto !important; /* Allow horizontal scroll */
+        -webkit-overflow-scrolling: touch;
+    }
+
+    #dept-view-table {
+        min-width: 800px; /* Ensure table doesn't collapse too much */
+    }
+
+    /* Sticky First Column (Date) */
+    #dept-view-table thead th:first-child,
+    #dept-view-table tbody td:first-child {
+        position: sticky !important;
+        left: 0 !important;
+        z-index: 10 !important;
+        background-color: #f9fafb !important; /* Match table background */
+        box-shadow: 2px 0 5px rgba(0,0,0,0.05); /* Subtle shadow to indicate scroll */
+    }
+
+    #dept-view-table thead th:first-child {
+        z-index: 20 !important; /* Stay above body sticky cells */
+    }
+
+    /* 4. FullCalendar Mobile Adjustments */
+    .fc-toolbar {
+        /* Restore horizontal layout by removing flex-direction: column */
+        flex-wrap: nowrap !important;
+        gap: 4px !important;
+        padding: 0 4px !important;
+    }
+
+    .fc-toolbar-title {
+        font-size: 1.0rem !important; /* Smaller title */
+    }
+
+    .fc .fc-button {
+        width: auto !important;
+        height: 24px !important; /* Increased back to 24px for alignment */
+        min-height: 0 !important;
+        padding: 0 4px !important; /* Keep compact padding */
+        font-size: 0.75rem !important; /* Keep text size */
+        line-height: 22px !important; /* Vertically center */
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+
+    .fc .fc-toolbar-chunk {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 2px;
+    }
+
+    /* Smaller fonts for calendar grid on mobile */
+    .fc-col-header-cell-cushion {
+        font-size: 0.8rem !important;
+    }
+
+    .fc-daygrid-day-number {
+        font-size: 0.8rem !important;
+    }
+
+    /* 5. Modal & Admin Form Adjustments (Grid to Stack) */
+    .grid-cols-2, .grid-cols-3, .grid-cols-4, .grid-cols-12 {
+        grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+    }
+
+    /* Specific overrides for admin page items that should remain compact */
+    .flex-row.md\:flex-row {
+        flex-direction: column !important;
+    }
+
+    .md\:col-span-3, .md\:col-span-6, .md\:col-span-12 {
+        grid-column: span 1 / span 1 !important;
+    }
+
+    /* 6. Header / Navbar - Restored to Horizontal (Defaults work) */
+    #main-header .max-w-7xl {
+        height: auto !important;
+        padding-top: 8px !important; /* Adjusted padding as requested */
+        padding-bottom: 8px !important; /* Adjusted padding as requested */
+        /* flex-direction: column removed */
+    }
+
+    /* #auth-status override removed to allow horizontal flex */
+
+    /* Make buttons full width on small screens if needed */
+
+    /* Make buttons full width on small screens if needed */
+    .modal-footer button {
+        flex-grow: 1;
+    }
+
+    /* 7. Force 1-Column Print for List View (Mobile Mode) */
+    @media print {
+        /* Override Grid to Block/Single Col */
+        .grid.grid-cols-2 {
+            display: block !important;
+        }
+
+        /* Hide screen-specific 2-col headers/spacers if any */
+        .list-2weeks-print-grid {
+            display: block !important;
+        }
+
+        /* Ensure columns stack */
+        .list-2weeks-print-grid > div {
+            width: 100% !important;
+            break-inside: auto !important;
+            margin-bottom: 20px !important;
+            border-right: none !important; /* Remove separator */
+        }
+
+        /* Hide the 2nd header if simply stacking? 
+           Actually, the app generates two columns: Week 1 and Week 2.
+           We want them to stack.
+        */
+        
+        /* Ensure table/list flows vertically */
+        .list-day-block {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+        }
+    }
+}

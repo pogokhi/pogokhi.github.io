@@ -1,0 +1,50 @@
+    <div class="flex flex-col h-full min-h-0 gap-4">
+        <!-- Top Toolbar -->
+        <div class="flex items-center justify-between bg-white rounded-lg shadow p-3 no-print flex-shrink-0">
+            <div class="flex items-center gap-4">
+                <!-- Search (Simplified) -->
+                <div class="relative hidden sm:block">
+                    <input type="text" id="search-schedule" placeholder="일정 검색..."
+                        class="border rounded pl-8 pr-2 py-1 text-sm focus:ring-2 focus:ring-purple-500 w-48">
+                    <span class="material-symbols-outlined absolute left-2 top-1.5 text-gray-400 text-sm">search</span>
+                    <div id="search-results" class="hidden absolute top-full left-0 w-64 bg-white shadow-lg rounded border mt-1 z-50 max-h-60 overflow-y-auto"></div>
+                </div>
+
+                <!-- Sat/Sun Toggle -->
+                <label class="flex items-center gap-2 cursor-pointer text-sm font-medium text-gray-700 select-none">
+                    <input type="checkbox" id="chk-show-weekends" class="rounded text-purple-600 focus:ring-purple-500">
+                    <span class="md:hidden">토/일 표시</span><span class="hidden md:inline">토/일요일 표시</span>
+                </label>
+
+                <!-- Week Expansion Toggles -->
+                <div class="flex items-center gap-3 border-l pl-3 ml-1">
+                    <label class="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-gray-600 select-none">
+                        <input type="checkbox" id="chk-add-prev-week" class="rounded text-purple-500 focus:ring-purple-400">
+                        <span class="md:hidden">이전 주</span><span class="hidden md:inline">이전 주 추가</span>
+                    </label>
+                    <label class="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-gray-600 select-none">
+                        <input type="checkbox" id="chk-add-next-week" class="rounded text-purple-500 focus:ring-purple-400">
+                        <span class="md:hidden">다음 주</span><span class="hidden md:inline">다음 주 추가</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="flex gap-2">
+                <button id="btn-add-schedule"
+                    class="bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold py-1.5 px-3 rounded flex items-center gap-1 transition">
+                    <span class="material-symbols-outlined text-sm">add</span> 일정 등록
+                </button>
+                <button id="btn-print-modal"
+                    class="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium py-1.5 px-3 rounded flex items-center gap-1 transition">
+                    <span class="material-symbols-outlined text-sm">print</span> 인쇄
+                </button>
+            </div>
+        </div>
+
+        <!-- Calendar Container -->
+        <div class="flex-grow bg-white rounded-lg shadow p-2 sm:p-4 min-h-0 relative flex flex-col h-full">
+            <div id="calendar" class="flex-grow h-full w-full"></div>
+        </div>
+    </div>
+
+<!-- Event Detail/Edit Modal is handled globally in App.js -->

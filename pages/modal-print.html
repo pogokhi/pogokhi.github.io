@@ -1,0 +1,100 @@
+<div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-4 animate-fade-in">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden transform transition-all scale-100">
+        <!-- Header -->
+        <div class="bg-gray-800 px-6 py-4 flex items-center justify-between">
+            <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                <span class="material-symbols-outlined">print</span> 인쇄 옵션
+            </h3>
+            <button id="btn-print-close" class="text-gray-400 hover:text-white transition">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+
+        <!-- Body -->
+        <div class="p-6 space-y-5">
+            <!-- 1. View Type -->
+            <div>
+                <label class="block text-gray-700 text-sm font-bold mb-2">출력 형태</label>
+                <div class="grid grid-cols-1 gap-3">
+                    <label id="print-view-label"
+                        class="border rounded p-3 flex flex-col items-center justify-center gap-2 cursor-pointer bg-purple-50 border-purple-600 transition">
+                        <input type="radio" name="print-view" value="calendar" checked class="hidden">
+                        <span id="print-view-icon" class="material-symbols-outlined text-gray-500">calendar_month</span>
+                        <span id="print-view-title" class="text-sm font-medium">달력형 (월간)</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- [NEW] 1.1 Date Range Selection (Dept List Only) -->
+            <div id="print-range-section" class="hidden space-y-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <label class="block text-gray-800 text-sm font-bold">인쇄 기간 설정</label>
+                
+                <div class="flex gap-2">
+                    <select id="print-dept-month" class="flex-grow border rounded px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-purple-500 outline-none">
+                        <!-- JS Populated -->
+                    </select>
+                    <div class="flex items-center gap-3 ml-2">
+                        <label class="flex items-center gap-1.5 cursor-pointer text-sm">
+                            <input type="checkbox" id="print-dept-front2" class="rounded text-purple-600 focus:ring-purple-500"> 앞쪽 2주
+                        </label>
+                        <label class="flex items-center gap-1.5 cursor-pointer text-sm">
+                            <input type="checkbox" id="print-dept-back2" class="rounded text-purple-600 focus:ring-purple-500"> 뒷쪽 2주
+                        </label>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 items-end">
+                    <div>
+                        <label class="block text-gray-600 text-[11px] font-bold mb-1">시작일</label>
+                        <input type="date" id="print-start-date" class="w-full border rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-purple-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-gray-600 text-[11px] font-bold mb-1">종료일</label>
+                        <input type="date" id="print-end-date" class="w-full border rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-purple-500 outline-none">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Paper Size & Orientation -->
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-gray-700 text-sm font-bold mb-2">용지 크기</label>
+                    <select id="print-size"
+                        class="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-purple-500 bg-white">
+                        <option value="A4">A4</option>
+                        <option value="B4" selected>B4</option>
+                        <option value="A3">A3</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-700 text-sm font-bold mb-2">방향</label>
+                    <select id="print-orient"
+                        class="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-purple-500 bg-white">
+                        <option value="landscape">가로 (Landscape)</option>
+                        <option value="portrait">세로 (Portrait)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- 3. Scaling -->
+            <div class="hidden">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" id="print-scale" checked
+                        class="rounded text-purple-600 focus:ring-purple-500">
+                    <span class="text-sm text-gray-700">1페이지에 맞추기 (자동 축소)</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="bg-gray-50 px-6 py-4 flex justify-end gap-3 border-t">
+            <button id="btn-print-cancel"
+                class="text-gray-600 hover:bg-gray-200 px-4 py-2 rounded font-medium transition">취소</button>
+            <button id="btn-do-print"
+                class="bg-gray-800 hover:bg-black text-white px-6 py-2 rounded font-bold shadow transition flex items-center gap-2">
+                <span class="material-symbols-outlined text-sm">print</span> 인쇄하기
+            </button>
+        </div>
+    </div>
+</div>
