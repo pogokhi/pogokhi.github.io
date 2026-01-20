@@ -310,8 +310,8 @@ const App = {
             }
         } else {
             authContainer.innerHTML = `
-                <button id="btn-login" class="text-sm font-medium text-gray-600 hover:text-gray-900">로그인</button>
-            `;
+            <button id="btn-login" class="text-sm px-3 py-1 border border-gray-300 rounded hover:bg-gray-100">로그인</button>
+        `;
             document.getElementById('btn-login').addEventListener('click', () => {
                 this.navigate('login');
             });
@@ -2463,7 +2463,7 @@ const App = {
         if (schoolNameEl) schoolNameEl.textContent = sName;
         if (schoolNameScreenEl) schoolNameScreenEl.textContent = sName;
 
-        this.state.departments = await this.fetchDepartments();
+        this.state.departments = await this.fetchDepartmentsWithFallback();
 
         // 3. Bind Controls
         const btnPrev = document.getElementById('btn-list-prev');
@@ -2909,7 +2909,7 @@ const App = {
         const ay = (mm < 3) ? y - 1 : y;
 
         this.state.currentSettings = await this.fetchSettings(ay);
-        this.state.departments = await this.fetchDepartments(ay);
+        this.state.departments = await this.fetchDepartmentsWithFallback(ay);
 
         const btnPrev = document.getElementById('btn-dept-prev');
         const btnNext = document.getElementById('btn-dept-next');
@@ -3192,6 +3192,32 @@ const App = {
         }
 
         return results || [];
+    },
+
+    fetchDepartmentsWithFallback: async function (year = null) {
+        const targetYear = year || this.state.currentYear || new Date().getFullYear();
+        
+        // 1. Try Target Year
+        let depts = await this.fetchDepartments(targetYear);
+        if (depts && depts.length > 0) return depts;
+
+        console.log(`No active departments for ${targetYear}. Searching for fallback...`);
+
+        // 2. Find Closest Available Year
+        const { data: years, error: yErr } = await window.SupabaseClient.supabase
+            .from('departments')
+            .select('academic_year')
+            .eq('is_active', true);
+
+        if (yErr || !years || years.length === 0) return [];
+
+        const uniqueYears = [...new Set(years.map(y => y.academic_year))];
+        const closestYear = uniqueYears.sort((a, b) => Math.abs(a - targetYear) - Math.abs(b - targetYear))[0];
+
+        if (!closestYear) return [];
+
+        console.log(`Using fallback departments from academic year: ${closestYear}`);
+        return await this.fetchDepartments(closestYear);
     },
 
     fetchSchedules: async function () {
