@@ -101,9 +101,12 @@ const App = {
         try {
             // 1. Initialize Supabase
             if (window.SupabaseClient) {
-                await window.SupabaseClient.init();
+                const initialized = await window.SupabaseClient.init();
+                if (!initialized) {
+                    throw new Error("설정 파일(js/config.js)을 찾을 수 없거나 내용이 올바르지 않습니다. 로컬 환경에서 js/config.js 파일이 존재하며 Git에 정상적으로 포함되어 있는지 확인해 주세요.");
+                }
             } else {
-                throw new Error("Supabase Client not loaded.");
+                throw new Error("Supabase Client JS 파일이 로드되지 않았습니다.");
             }
 
             // 2. Check Auth State
