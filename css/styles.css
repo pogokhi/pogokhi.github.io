@@ -389,11 +389,31 @@ html {
 
 
 /* Default: Hide print-only header on screen */
-.print-only-header {
-    display: none;
+/* Default: Hide print-only elements on screen */
+.print-only-header,
+.dept-name-short {
+    display: none !important;
+}
+
+/* Mobile: Use short department names (dept-name-short) */
+@media screen and (max-width: 767px) {
+    .dept-name-full {
+        display: none !important;
+    }
+
+    .dept-name-short {
+        display: inline !important;
+    }
 }
 
 @media print {
+    .dept-name-full {
+        display: none !important;
+    }
+
+    .dept-name-short {
+        display: inline !important;
+    }
 
     /* Root visibility and height reset */
     body {

@@ -238,6 +238,18 @@
     }
 
     /* #auth-status override removed to allow horizontal flex */
+    
+    /* 8. Footer padding reduction */
+    footer .max-w-7xl {
+        padding-top: 8px !important;
+        padding-bottom: 8px !important;
+    }
+
+    /* 9. Toolbar padding reduction */
+    .view-toolbar {
+        padding-top: 8px !important;
+        padding-bottom: 8px !important;
+    }
 
     /* Make buttons full width on small screens if needed */
 

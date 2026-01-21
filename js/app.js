@@ -5117,9 +5117,14 @@ const App = {
                 const deptHeader = document.createElement('div');
                 deptHeader.className = "dept-header font-bold mb-0.5 whitespace-nowrap overflow-hidden text-ellipsis";
                 deptHeader.style.color = '#000';
-                // Displaying `◈ [dept_short]` format
+                // Displaying [dept_name] for Screen (no-print) and [dept_short] for Print (print-only)
                 const deptShort = group.info.dept_short || group.info.dept_name.substring(0, 2);
-                deptHeader.innerHTML = `<span style="color:${group.info.dept_color}">◈</span> ${deptShort}`;
+                const deptFull = group.info.dept_name;
+                deptHeader.innerHTML = `
+                    <span style="color:${group.info.dept_color}">◈</span> 
+                    <span class="dept-name-full">${deptFull}</span>
+                    <span class="dept-name-short">${deptShort}</span>
+                `;
                 deptDiv.appendChild(deptHeader);
 
                 group.events.forEach(ev => {
