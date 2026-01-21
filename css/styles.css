@@ -389,10 +389,17 @@ html {
 
 
 /* Default: Hide print-only header on screen */
-/* Default: Hide print-only elements on screen */
 .print-only-header,
 .dept-name-short {
     display: none !important;
+}
+
+/* 캘린더 타이틀 중첩 방지: MutationObserver와 함께 작동하여 중복 텍스트 발생 시 구조 제어 */
+.fc-toolbar-title {
+    display: block !important;
+    overflow: hidden !important;
+    white-space: nowrap !important;
+    text-overflow: ellipsis !important;
 }
 
 /* Mobile: Use short department names (dept-name-short) */

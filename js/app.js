@@ -2163,11 +2163,10 @@ const App = {
             }
         }
     },
-
     initCalendar: async function () {
         const calendarEl = document.getElementById('calendar');
         if (!calendarEl) return;
-
+        
         // 1. Initialize State Container
         this.state.calendarData = {
             holidayMap: {},
@@ -2228,8 +2227,8 @@ const App = {
             },
             headerToolbar: {
                 left: 'customPrev,customNext today',
-                center: 'title',
-                right: 'extendedMonth,customDept,customList' // Use our custom buttons
+                center: '', // REMOVED 'title' to prevent FullCalendar from managing it
+                right: 'extendedMonth,customDept,customList' 
             },
             height: '100%', // Fill container for interior scroll on screen
             expandRows: true, // Stretch rows to fill available space (memo space)
@@ -2292,25 +2291,24 @@ const App = {
                     if (chkPrev) calEl.classList.toggle('show-prev-week', chkPrev.checked);
                     if (chkNext) calEl.classList.toggle('show-next-week', chkNext.checked);
 
-                    // Optimized Title Update: Use middle date of range to identify the current month
+                    // Manual Title Management: Use middle date of range to identify the current month
                     const middleDate = new Date((info.start.getTime() + info.end.getTime()) / 2);
                     const expectedTitle = `${middleDate.getFullYear()}년 ${middleDate.getMonth() + 1}월`;
-                    this._expectedTitle = expectedTitle; // Update cached expectation first
+                    this._expectedTitle = expectedTitle; // Update cached expectation for other logic if needed
                     
-                    const titleEl = document.querySelector('.fc-toolbar-title');
-                    if (titleEl) {
-                        // Force update textContent – overwriting any default FC title or concatenation
-                        titleEl.textContent = expectedTitle; 
-                        
-                        // Single static observer to prevent FullCalendar from reverting the title
-                        if (!this._titleObserver) {
-                            this._titleObserver = new MutationObserver(() => {
-                                const currentTitle = document.querySelector('.fc-toolbar-title');
-                                if (currentTitle && currentTitle.textContent !== this._expectedTitle) {
-                                    currentTitle.textContent = this._expectedTitle;
-                                }
-                            });
-                            this._titleObserver.observe(titleEl, { childList: true, characterData: true, subtree: true });
+                    const toolbarEl = document.querySelector('.fc-header-toolbar');
+                    if (toolbarEl) {
+                        const chunks = toolbarEl.querySelectorAll('.fc-toolbar-chunk');
+                        const centerChunk = chunks[1]; // Middle chunk
+                        if (centerChunk) {
+                            let customTitle = centerChunk.querySelector('#custom-calendar-title');
+                            if (!customTitle) {
+                                centerChunk.innerHTML = `<h2 class="fc-toolbar-title" id="custom-calendar-title" style="margin:0;"></h2>`;
+                                customTitle = centerChunk.querySelector('#custom-calendar-title');
+                            }
+                            if (customTitle && customTitle.textContent !== expectedTitle) {
+                                customTitle.textContent = expectedTitle;
+                            }
                         }
                     }
                 }
@@ -4942,7 +4940,7 @@ const App = {
 
         this.state.calendarData = data;
         this.state.calendar.setOption('events', data.backgroundEvents);
-        this.state.calendar.render();
+        // REMOVED: this.state.calendar.render(); // Redundant and causes freeze due to full re-render
     },
 
     renderCalendarCell: function (arg) {
