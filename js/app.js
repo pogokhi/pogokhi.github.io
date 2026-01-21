@@ -13,6 +13,13 @@ const App = {
         listViewStart: null, // Start Date of current list week view
         departments: [], // Cached Departments
         templates: {}, // Cached Modal Templates
+        // Cache & Performance
+        cache: {
+            schedules: null,
+            departments: null,
+            basicSchedules: {}, // { academicYear: data }
+        },
+        _lastFetchId: 0,
     },
 
     // Constants
@@ -92,6 +99,14 @@ const App = {
             safety++;
         }
         return endDateStr;
+    },
+
+    // Clear Cache
+    clearCache: function () {
+        this.state.cache.schedules = null;
+        this.state.cache.departments = null;
+        this.state.cache.basicSchedules = {};
+        console.log("🧹 Cache cleared");
     },
 
     // Initialization
@@ -450,6 +465,7 @@ const App = {
                 });
 
                 if (error) throw error;
+                this.clearCache();
                 // Auth State Change listener will handle redirect
             } catch (err) {
                 errorMsg.textContent = '로그인 실패: 이메일 또는 비밀번호를 확인하세요.';
@@ -1563,6 +1579,7 @@ const App = {
         if (error) {
             alert('학교 정보 저장 실패: ' + error.message);
         } else {
+            this.clearCache();
             alert('학교 정보가 성공적으로 저장되었습니다.');
             location.reload();
         }
@@ -1897,6 +1914,7 @@ const App = {
             // --- REPAIR LOGIC: Re-link orphaned schedules ---
             await this.repairOrphanedSchedules(academicYear);
 
+            this.clearCache();
             alert('학교 정보가 성공적으로 저장되었습니다.');
             // Reload the view with the currently selected year (don't force reload page)
             if (this.refreshAdminView) {
@@ -2004,19 +2022,38 @@ const App = {
         }
     },
 
-    updateBrand: function (schoolNameKR, schoolNameEN) {
-        let display = 'GOELink';
-        if (schoolNameKR || schoolNameEN) {
-            if (schoolNameKR && schoolNameEN) {
-                display = `${schoolNameKR} (${schoolNameEN})`;
-            } else {
-                display = schoolNameKR || schoolNameEN;
+    updateBrand: function (settings) {
+        // Priority: name_en > school_name > 'GOE'
+        let baseName = 'GOE';
+        if (settings) {
+            if (settings.name_en) {
+                baseName = settings.name_en;
+            } else if (settings.school_name) {
+                baseName = settings.school_name;
             }
         }
 
-        const brandLabel = document.querySelector('h1.text-xl');
-        if (brandLabel) {
-            brandLabel.innerHTML = `${display} <span class="text-xs font-normal text-gray-500 ml-1">v2.0</span>`;
+        const display = `${baseName}Link`;
+        
+        // 1. Update Browser Tab Title
+        document.title = display;
+
+        // 2. Update UI Brand Label (preserves version span)
+        const titleEl = document.querySelector('#main-header h1');
+        if (titleEl) {
+            const newTitle = `${display} `;
+            let textNodeFound = false;
+            titleEl.childNodes.forEach(node => {
+                if (node.nodeType === 3 && node.textContent.includes('Link')) {
+                    node.textContent = newTitle;
+                    textNodeFound = true;
+                }
+            });
+
+            if (!textNodeFound) {
+                const versionSpan = titleEl.querySelector('span')?.outerHTML || '<span class="text-xs font-normal text-gray-500 ml-1">v2.0</span>';
+                titleEl.innerHTML = `${newTitle}${versionSpan}`;
+            }
         }
     },
 
@@ -2204,7 +2241,7 @@ const App = {
                 extendedMonth: {
                     type: 'dayGrid',
                     dateIncrement: { months: 1 },
-                    // titleFormat: { year: 'numeric', month: 'long' }, // Removed to rely on JS override
+                    titleFormat: { year: 'numeric', month: 'long' }, // Ensure base title is simple
                     visibleRange: function (currentDate) {
                         const firstDay = 1; // Monday start
 
@@ -2241,61 +2278,36 @@ const App = {
 
             // Dynamic Fetching on View Change
             datesSet: async (info) => {
-                // TAGGING FIRST: Prevent flicker by hiding rows immediately
                 const calEl = document.getElementById('calendar');
                 if (calEl) {
                     const rows = Array.from(calEl.querySelectorAll('.fc-daygrid-body table tr'));
-                    if (rows.length > 0) {
-                        rows.forEach((row, idx) => {
-                            row.classList.remove('fc-row-prev-buffer', 'fc-row-next-buffer');
-                            if (idx === 0) row.classList.add('fc-row-prev-buffer');
-                            if (idx === rows.length - 1) row.classList.add('fc-row-next-buffer');
-                        });
-                    }
+                    rows.forEach((row, idx) => {
+                        row.classList.remove('fc-row-prev-buffer', 'fc-row-next-buffer');
+                        if (idx === 0) row.classList.add('fc-row-prev-buffer');
+                        if (idx === rows.length - 1) row.classList.add('fc-row-next-buffer');
+                    });
 
                     const chkPrev = document.getElementById('chk-add-prev-week');
                     const chkNext = document.getElementById('chk-add-next-week');
                     if (chkPrev) calEl.classList.toggle('show-prev-week', chkPrev.checked);
                     if (chkNext) calEl.classList.toggle('show-next-week', chkNext.checked);
 
-                    // CUSTOM TITLE LOGIC: Robust MutationObserver approach
-                    // Calculate expected title
-                    const middleTimestamp = (info.start.getTime() + info.end.getTime()) / 2;
-                    const middleDate = new Date(middleTimestamp);
-                    const year = middleDate.getFullYear();
-                    const month = middleDate.getMonth() + 1;
-                    const expectedTitle = `${year}년 ${month}월`;
-
+                    // Optimized Title Update: Use middle date of range to identify the current month
+                    const middleDate = new Date((info.start.getTime() + info.end.getTime()) / 2);
+                    const expectedTitle = `${middleDate.getFullYear()}년 ${middleDate.getMonth() + 1}월`;
+                    this._expectedTitle = expectedTitle; // Update cached expectation first
+                    
                     const titleEl = document.querySelector('.fc-toolbar-title');
                     if (titleEl) {
-                        // 1. Set immediately
-                        if (titleEl.textContent !== expectedTitle) {
-                            titleEl.textContent = expectedTitle;
-                        }
-
-                        // 2. Enforce via Observer (prevent FC from overwriting)
-                        if (!this._titleObserver) { // Attach only once per instance logic
-                            this._titleObserver = new MutationObserver((mutations) => {
-                                if (titleEl.textContent !== expectedTitle) {
-                                    // Temporarily disconnect to avoid infinite loop
-                                    this._titleObserver.disconnect();
-                                    titleEl.textContent = expectedTitle;
-                                    this._titleObserver.observe(titleEl, { childList: true, characterData: true, subtree: true });
-                                }
-                            });
-                            this._titleObserver.observe(titleEl, { childList: true, characterData: true, subtree: true });
-                        } else {
-                            // Update the target text expected by the existing observer? 
-                            // Actually, simpler to just disconnect and reconnect with new closure if needed, 
-                            // OR simply let the datesSet re-run trigger the set. 
-                            // But since the closure captures `expectedTitle`, we should re-create the observer or update a shared ref.
-                            // Simpler: Disconnect old, create new.
-                            this._titleObserver.disconnect();
-                            this._titleObserver = new MutationObserver((mutations) => {
-                                if (titleEl.textContent !== expectedTitle) {
-                                    this._titleObserver.disconnect();
-                                    titleEl.textContent = expectedTitle;
-                                    this._titleObserver.observe(titleEl, { childList: true, characterData: true, subtree: true });
+                        // Force update textContent – overwriting any default FC title or concatenation
+                        titleEl.textContent = expectedTitle; 
+                        
+                        // Single static observer to prevent FullCalendar from reverting the title
+                        if (!this._titleObserver) {
+                            this._titleObserver = new MutationObserver(() => {
+                                const currentTitle = document.querySelector('.fc-toolbar-title');
+                                if (currentTitle && currentTitle.textContent !== this._expectedTitle) {
+                                    currentTitle.textContent = this._expectedTitle;
                                 }
                             });
                             this._titleObserver.observe(titleEl, { childList: true, characterData: true, subtree: true });
@@ -2307,20 +2319,13 @@ const App = {
 
                 this.distributeVerticalSpace();
 
-                // ROBUST SCROLL RESET: Ensure we start at the top
-                // Delay to ensure it runs after distributeVerticalSpace's RAF and internal resizing
-                setTimeout(() => {
-                    // 1. Main Content Container
+                // Efficient Scroll Reset
+                requestAnimationFrame(() => {
                     const mainContent = document.getElementById('main-content');
                     if (mainContent) mainContent.scrollTop = 0;
-
-                    // 2. Window (Fallback)
                     window.scrollTo(0, 0);
-
-                    // 3. FullCalendar Internal Scroller (The most likely culprit for daygrid overflow)
-                    const scrollers = document.querySelectorAll('.fc-scroller');
-                    scrollers.forEach(el => el.scrollTop = 0);
-                }, 100);
+                    document.querySelectorAll('.fc-scroller').forEach(el => el.scrollTop = 0);
+                });
             },
 
             // Custom Classes for Red Dates
@@ -3116,37 +3121,6 @@ const App = {
 
     // --- UI Updates ---
 
-    updateHeaderTitle: function(settings) {
-        const titleEl = document.querySelector('#main-header h1');
-        if (!titleEl) return;
-
-        // Priority: name_en > school_name > 'GOE'
-        let baseName = 'GOE';
-        if (settings) {
-            if (settings.name_en) {
-                baseName = settings.name_en;
-            } else if (settings.school_name) {
-                baseName = settings.school_name;
-            }
-        }
-        
-        const newTitle = `${baseName}Link `;
-
-        // Update first text node to preserve the version span
-        let textNodeFound = false;
-        titleEl.childNodes.forEach(node => {
-            if (node.nodeType === 3 && node.textContent.includes('Link')) { // Node.TEXT_NODE
-                node.textContent = newTitle;
-                textNodeFound = true;
-            }
-        });
-
-        // Fallback if structure changed
-        if (!textNodeFound) {
-             const versionSpan = titleEl.querySelector('span')?.outerHTML || '<span class="text-xs font-normal text-gray-500 ml-1">v2.0</span>';
-             titleEl.innerHTML = `${newTitle}${versionSpan}`;
-        }
-    },
 
     // --- Data Fetching ---
 
@@ -3169,8 +3143,8 @@ const App = {
 
         const result = settings || {};
         
-        // [DYNAMIC TITLE] Update Header based on settings
-        this.updateHeaderTitle(result);
+        // [DYNAMIC TITLE] Update Header & Tab Title based on settings
+        this.updateBrand(result);
 
         // Fetch Basic Schedules (DB Refactor)
         if (result.academic_year) {
@@ -3584,24 +3558,18 @@ const App = {
             recurSection.classList.add('hidden'); // Hide recurrence on edit for simplicity in V1
             includeHolidaysWrapper.classList.add('hidden'); // Hide include holidays on edit
 
-            const event = this.state.calendar.getEventById(eventId);
-            if (event) {
+            const schedule = (this.state.cache.schedules || []).find(s => String(s.id) === String(eventId));
+            if (schedule) {
                 document.getElementById('schedule-id').value = eventId;
-                titleInput.value = event.title;
-                startInput.value = event.startStr;
-                endInput.value = event.endStr || event.startStr;
+                titleInput.value = schedule.title;
+                startInput.value = schedule.start_date;
+                endInput.value = schedule.end_date || schedule.start_date;
 
-                if (event.allDay && event.end) {
-                    const d = new Date(event.end);
-                    d.setDate(d.getDate() - 1);
-                    endInput.value = d.toISOString().split('T')[0];
-                }
-
-                deptSelect.value = event.extendedProps.deptId;
-                visSelect.value = event.extendedProps.visibility;
-                descInput.value = event.extendedProps.description || '';
-                printCheck.checked = event.extendedProps.isPrintable !== false;
-                includeHolidaysCheck.checked = event.extendedProps.weekend === 'on';
+                deptSelect.value = schedule.dept_id;
+                visSelect.value = schedule.visibility;
+                descInput.value = schedule.description || '';
+                printCheck.checked = schedule.is_printable !== false;
+                includeHolidaysCheck.checked = schedule.weekend === 'on';
             }
         } else {
             recurSection.classList.remove('hidden');
@@ -4833,6 +4801,8 @@ const App = {
     },
 
     refreshCalendarData: async function (start, end) {
+        const fetchId = ++this.state._lastFetchId;
+        
         const startY = start.getFullYear();
         const endY = end.getFullYear();
         const academicYears = [];
@@ -4840,14 +4810,50 @@ const App = {
             academicYears.push(cy);
         }
 
-        const [basicRows, departmentsRes, schedules] = await Promise.all([
-            window.SupabaseClient.supabase.from('basic_schedules').select('*').in('academic_year', academicYears),
-            window.SupabaseClient.supabase.from('departments').select('*'), // Get ALL for robust lookup
-            this.fetchSchedules()
-        ]);
+        // 1. Check & Fetch missing data
+        const missingAYs = academicYears.filter(ay => !this.state.cache.basicSchedules[ay]);
+        const needsDepts = !this.state.cache.departments;
+        const needsSchedules = !this.state.cache.schedules;
 
-        const allDepartments = departmentsRes.data || [];
-        
+        const promises = [];
+        if (missingAYs.length > 0) promises.push(window.SupabaseClient.supabase.from('basic_schedules').select('*').in('academic_year', missingAYs));
+        else promises.push(Promise.resolve({ data: [] }));
+
+        if (needsDepts) promises.push(window.SupabaseClient.supabase.from('departments').select('*'));
+        else promises.push(Promise.resolve({ data: this.state.cache.departments }));
+
+        if (needsSchedules) promises.push(this.fetchSchedules());
+        else promises.push(Promise.resolve(this.state.cache.schedules));
+
+        const [basicRes, departmentsRes, schedulesData] = await Promise.all(promises);
+
+        // Check if this request is still valid (not superseded by a newer one)
+        if (fetchId !== this.state._lastFetchId) return;
+
+        // 2. Update Cache
+        if (missingAYs.length > 0 && basicRes.data) {
+            basicRes.data.forEach(row => {
+                const ay = row.academic_year;
+                if (!this.state.cache.basicSchedules[ay]) this.state.cache.basicSchedules[ay] = [];
+                this.state.cache.basicSchedules[ay].push(row);
+            });
+            // Mark empty years to avoid re-fetching
+            missingAYs.forEach(ay => {
+                if (!this.state.cache.basicSchedules[ay]) this.state.cache.basicSchedules[ay] = [];
+            });
+        }
+        if (needsDepts) this.state.cache.departments = departmentsRes.data || [];
+        if (needsSchedules) this.state.cache.schedules = schedulesData || [];
+
+        // 3. Assemble data from Cache
+        const allBasicSchedules = [];
+        academicYears.forEach(ay => {
+            const yearData = this.state.cache.basicSchedules[ay];
+            if (yearData) allBasicSchedules.push(...yearData);
+        });
+        const allDepartments = this.state.cache.departments;
+        const schedules = this.state.cache.schedules;
+
         // [SEARCH] Identify "Active" Academic Year for Scoping
         const midDate = new Date(start.getTime() + (end.getTime() - start.getTime()) / 2);
         const mm = midDate.getMonth() + 1;
@@ -4858,21 +4864,21 @@ const App = {
         // For sidebar filter list: Only active departments of the CURRENTLY VIEWED academic year
         const viewDepartments = allDepartments.filter(d => d.is_active && d.academic_year == activeAY);
 
-        this.state.allDepartmentsCached = allDepartments; // [SEARCH] Cache for lookup
-        this.state.departments = viewDepartments; // For sidebar filter list
+        this.state.allDepartmentsCached = allDepartments; 
+        this.state.departments = viewDepartments; 
         this.state.schedules = schedules;
-        this.state.basicSchedules = basicRows.data || []; // [SEARCH] Store for search
+        this.state.basicSchedules = allBasicSchedules;
 
         const data = {
             holidayMap: {},
             redDayMap: {},
-            bgColorMap: {}, // ADDED: To store background color for header only
+            bgColorMap: {},
             scheduleMap: {},
             backgroundEvents: [],
-            departments: allDepartments // For calendar cell lookup (includes inactive/historical)
+            departments: allDepartments
         };
 
-        const allEvents = this.transformEvents(schedules, {}, allDepartments, basicRows.data || []);
+        const allEvents = this.transformEvents(schedules, {}, allDepartments, allBasicSchedules);
 
         allEvents.forEach(e => {
             const dateKey = e.start;
@@ -4885,17 +4891,16 @@ const App = {
                     if (label && !data.holidayMap[dateKey].includes(label)) data.holidayMap[dateKey].push(label);
                     if (e.className.includes('holiday-bg-event')) {
                         data.redDayMap[dateKey] = true;
-                        data.bgColorMap[dateKey] = '#fef2f2'; // Holiday Red
+                        data.bgColorMap[dateKey] = '#fef2f2';
                     } else if (e.className.includes('vacation-bg-event')) {
-                        data.bgColorMap[dateKey] = '#fffcfc'; // Vacation Pink
+                        data.bgColorMap[dateKey] = '#fffcfc';
                     } else if (e.className.includes('event-exam-text')) {
-                        data.bgColorMap[dateKey] = '#fff7ed'; // Exam Orange
+                        data.bgColorMap[dateKey] = '#fff7ed';
                     } else if (e.className.includes('event-major-text')) {
-                        data.bgColorMap[dateKey] = '#eff6ff'; // Event Blue
+                        data.bgColorMap[dateKey] = '#eff6ff';
                     }
                 }
 
-                // Also check vacation events if not caught above (though vacation usually doesn't have text classes, but let's be safe)
                 if (e.className.includes('vacation-bg-event')) {
                     data.bgColorMap[dateKey] = '#fffcfc';
                 }
@@ -4907,16 +4912,12 @@ const App = {
                     if (daysCount > 365) break;
                     const dKey = this.formatLocal(current);
 
-                    // --- Weekend/Holiday Visibility Check ---
                     const day = current.getDay();
                     const isWeekend = day === 0 || day === 6;
                     const isHoliday = data.redDayMap && data.redDayMap[dKey];
                     const showOnWeekend = e.extendedProps?.weekend === 'on';
 
-                    // If it's a holiday/weekend AND not explicitly 'showOnWeekend', skip rendering this day
                     if ((isWeekend || isHoliday) && !showOnWeekend) {
-                        // Special case: If it's a single-day entry (start === end) and the user explicitly clicked it, we show it (standard FC behavior)
-                        // But range entries (startDate !== endDate) should respect the rule.
                         const isRangeEntry = e.start !== (e.end || e.start);
                         if (isRangeEntry) {
                             current.setDate(current.getDate() + 1);
@@ -4941,18 +4942,23 @@ const App = {
 
         this.state.calendarData = data;
         this.state.calendar.setOption('events', data.backgroundEvents);
-
-        // Force full rerender of the calendar to apply classes and cell content immediately
         this.state.calendar.render();
     },
 
     renderCalendarCell: function (arg) {
         const dateStr = this.formatLocal(arg.date);
         const data = this.state.calendarData || { holidayMap: {}, redDayMap: {}, scheduleMap: {}, departments: [] };
+        const canEdit = this.state.role === 'admin' || this.state.role === 'head_teacher' || this.state.role === 'head';
 
         const container = document.createElement('div');
-        container.className = "flex flex-col w-full justify-start items-stretch"; // Removed flex-grow
-        container.style.height = "100%"; // RESTORED: Force full height for sticky header track
+        container.className = "flex flex-col w-full justify-start items-stretch";
+        container.style.height = "100%";
+        if (canEdit) {
+            container.style.cursor = 'pointer';
+            container.onclick = () => {
+                this.openScheduleModal(null, dateStr);
+            };
+        }
 
         // MASKING: Ensure the whole cell is opaque white (or today color) to hide FullCalendar background events
         // This reinforces the "color restricted to header" rule.
@@ -5014,6 +5020,11 @@ const App = {
 
         dateWrapper.appendChild(dayLink);
         headerRow.appendChild(dateWrapper);
+
+        // [CLICK] Prevent "New Schedule" modal when clicking the date link specifically
+        dayLink.onclick = (e) => {
+            if (canEdit) e.stopPropagation();
+        };
 
         // 2. Holiday Names (Right)
         if (data.holidayMap[dateStr] || arg.isToday) {
