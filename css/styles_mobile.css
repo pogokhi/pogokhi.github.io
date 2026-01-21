@@ -103,16 +103,16 @@
     /* 3. Calendar Button (Dept & List): MOVED TO HEADER (Fixed Position) */
     #btn-dept-calendar, #btn-list-calendar {
         position: fixed !important;
-        top: 10px !important; /* MATCHING ALIGNMENT: Header Pad(8px) + FlexCenterOffset(2px) = 10px */
+        top: 10.5px !important; /* Fine-tuned from 11px (too low) and 10px (too high) */
         right: 84px !important; /* 16px(Pad) + 62px(Logout) + 6px(Gap) */
         z-index: 50 !important;
         height: 24px !important;
         padding: 0 6px !important;
         font-size: 0.75rem !important;
+        line-height: 22px !important; /* Vertically center content like other buttons */
         background-color: white !important;
         border: 1px solid #d1d5db !important;
         box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important;
-        height: 24px !important;
         display: flex !important;
         align-items: center !important;
     }
