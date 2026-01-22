@@ -128,7 +128,14 @@ const App = {
             await this.checkAuth();
 
             // 2.5 Load Initial Settings (for Dynamic Title etc)
-            await this.fetchSettings();
+            const settings = await this.fetchSettings();
+            
+            // Check if settings exist (fresh project check)
+            if (!settings.academic_year) {
+                alert("학년도를 설정한 후 이용할 수 있습니다. 관리자로 접속하여 학년도를 설정해주세요.");
+                this.loadView('login');
+                return;
+            }
 
             // 3. Routing & History Setup
             window.addEventListener('popstate', (event) => {
@@ -3130,7 +3137,8 @@ const App = {
         if (targetYear) {
             query = query.eq('academic_year', targetYear).maybeSingle();
         } else {
-            query = query.order('academic_year', { ascending: false }).limit(1).single();
+            // Use maybeSingle() instead of single() to avoid 406 error if table is empty
+            query = query.order('academic_year', { ascending: false }).limit(1).maybeSingle();
         }
 
         const { data: settings, error } = await query;

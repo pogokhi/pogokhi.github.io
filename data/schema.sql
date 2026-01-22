@@ -194,7 +194,7 @@ VALUES (
     'a0000000-0000-0000-0000-000000000002', 
     '00000000-0000-0000-0000-000000000000', 
     'teacher@pogok.hs.kr', 
-    crypt('1234567890', gen_salt('bf')), 
+    crypt('1234', gen_salt('bf')), 
     now(), 
     '{"provider":"email","providers":["email"]}', 
     '{}', 
