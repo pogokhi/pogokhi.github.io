@@ -2,6 +2,9 @@
 -- Based on js/app.js reverse engineering + fix_rls.sql optimizations
 -- TABLES: user_roles, basic_schedules, settings, departments, schedules, error_logs
 
+-- crypt() 함수 사용을 위해 암호화 확장기능 활성화
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- 1. Table: user_roles
 CREATE TABLE IF NOT EXISTS public.user_roles (
     user_id uuid NOT NULL PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -162,75 +165,3 @@ GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
-
-
--- [Clone Seed Users for Pogokhi]
--- This script creates initial test users for Supabase Authentication and user_roles table.
--- Requires pgcrypto extension for password hashing.
-
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
--- 1. Create Users in auth.users
--- Admin User: admin@pogok.hs.kr / 12345678
-INSERT INTO auth.users (id, instance_id, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at, role, aud, confirmation_token)
-VALUES (
-    'a0000000-0000-0000-0000-000000000001', 
-    '00000000-0000-0000-0000-000000000000', 
-    'admin@pogok.hs.kr', 
-    crypt('1234567890', gen_salt('bf')), 
-    now(), 
-    '{"provider":"email","providers":["email"]}', 
-    '{}', 
-    now(), 
-    now(), 
-    'authenticated', 
-    'authenticated', 
-    ''
-) ON CONFLICT (id) DO NOTHING;
-
--- Teacher User: teacher@pogok.hs.kr / 12345678
-INSERT INTO auth.users (id, instance_id, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at, role, aud, confirmation_token)
-VALUES (
-    'a0000000-0000-0000-0000-000000000002', 
-    '00000000-0000-0000-0000-000000000000', 
-    'teacher@pogok.hs.kr', 
-    crypt('1234', gen_salt('bf')), 
-    now(), 
-    '{"provider":"email","providers":["email"]}', 
-    '{}', 
-    now(), 
-    now(), 
-    'authenticated', 
-    'authenticated', 
-    ''
-) ON CONFLICT (id) DO NOTHING;
-
--- Head Teacher User: head@pogok.hs.kr / 12345678
-INSERT INTO auth.users (id, instance_id, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at, role, aud, confirmation_token)
-VALUES (
-    'a0000000-0000-0000-0000-000000000003', 
-    '00000000-0000-0000-0000-000000000000', 
-    'head@pogok.hs.kr', 
-    crypt('1234567890', gen_salt('bf')), 
-    now(), 
-    '{"provider":"email","providers":["email"]}', 
-    '{}', 
-    now(), 
-    now(), 
-    'authenticated', 
-    'authenticated', 
-    ''
-) ON CONFLICT (id) DO NOTHING;
-
-
--- 2. Insert into public.user_roles matches
-INSERT INTO public.user_roles (user_id, email, role, status)
-VALUES 
-    -- Admin
-    ('a0000000-0000-0000-0000-000000000001', 'admin@pogok.hs.kr', 'admin', 'active'),
-    -- Teacher
-    ('a0000000-0000-0000-0000-000000000002', 'teacher@pogok.hs.kr', 'teacher', 'active'),
-    -- Head Teacher
-    ('a0000000-0000-0000-0000-000000000003', 'head@pogok.hs.kr', 'head_teacher', 'active')
-ON CONFLICT (user_id) DO UPDATE 
-SET role = EXCLUDED.role, status = EXCLUDED.status;
