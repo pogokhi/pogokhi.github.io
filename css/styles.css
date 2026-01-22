@@ -30,7 +30,6 @@ html {
 }
 
 @media screen {
-
     html,
     body {
         height: 100vh;
@@ -262,8 +261,6 @@ html {
     font-weight: 700;
 }
 
-
-
 /* Ensure the calendar toolbar doesn't scroll */
 .fc-header-toolbar {
     margin-bottom: 0.5rem !important;
@@ -361,7 +358,8 @@ html {
 }
 
 /* Triangle indicator for days in the current month */
-.fc-daygrid-day:not(.fc-day-other):not(.is-other-month) .calendar-cell-header::before {
+.fc-daygrid-day:not(.fc-day-other):not(.is-other-month)
+    .calendar-cell-header::before {
     content: "";
     position: absolute;
     top: 0;
@@ -376,9 +374,12 @@ html {
 }
 
 /* Red triangle for Sat/Sun/Holidays (only in current month) */
-.fc-day-sun:not(.fc-day-other):not(.is-other-month) .calendar-cell-header::before,
-.fc-day-sat:not(.fc-day-other):not(.is-other-month) .calendar-cell-header::before,
-.is-holiday:not(.fc-day-other):not(.is-other-month) .calendar-cell-header::before {
+.fc-day-sun:not(.fc-day-other):not(.is-other-month)
+    .calendar-cell-header::before,
+.fc-day-sat:not(.fc-day-other):not(.is-other-month)
+    .calendar-cell-header::before,
+.is-holiday:not(.fc-day-other):not(.is-other-month)
+    .calendar-cell-header::before {
     border-top-color: #dc2626 !important;
 }
 
@@ -386,7 +387,6 @@ html {
 .fc-daygrid-day-bg {
     z-index: 1 !important;
 }
-
 
 /* Default: Hide print-only header on screen */
 .print-only-header,
@@ -433,9 +433,9 @@ html {
     }
 
     #list-view-printable {
-        overflow: hidden !important; /* Prevent tiny overflows from creating blank pages */
+        overflow: hidden
+            !important; /* Prevent tiny overflows from creating blank pages */
     }
-
 
     #app,
     #main-content,
@@ -615,7 +615,7 @@ html {
         /* Force body section to expand */
     }
 
-    .fc-scrollgrid-section-body>td {
+    .fc-scrollgrid-section-body > td {
         height: 100% !important;
         /* Force body cell to expand */
     }
@@ -657,7 +657,7 @@ html {
     }
 
     /* UNCRUSH: Ensure the layout wrapper cells get full width */
-    .fc-scrollgrid-section>td {
+    .fc-scrollgrid-section > td {
         width: 100% !important;
         padding: 0 !important;
         border: none !important;
@@ -713,7 +713,6 @@ html {
     .fc-daygrid-body tr:last-child .fc-daygrid-day {
         border-bottom: 1px solid #000 !important;
     }
-
 
     /* Selective Restore: Custom Dash Divider (Restore visibility) */
     .calendar-dashed-divider {
@@ -802,10 +801,12 @@ html {
 
     /* Fix Bottom Border when Next Week Buffer is Hidden */
     /* The 2nd to last row becomes the visual bottom, so it needs a border */
-    #calendar:not(.show-next-week) .fc-daygrid-body tr:nth-last-child(2) .fc-daygrid-day {
+    #calendar:not(.show-next-week)
+        .fc-daygrid-body
+        tr:nth-last-child(2)
+        .fc-daygrid-day {
         border-bottom: 1px solid #000 !important;
     }
-
 }
 
 /* Custom Scrollbar Styling (Thinner) */
@@ -890,7 +891,6 @@ html {
         max-width: 100% !important;
         width: 100% !important;
     }
-    
 
     .list-day-block {
         border: none;
@@ -905,13 +905,13 @@ html {
         gap: 2rem !important;
     }
 
-
     /* 1-Week Column Support (Flow) */
     .list-1week-print-cols {
         column-count: 2 !important;
         column-gap: 2rem !important;
         width: 100% !important;
-        column-fill: auto !important; /* USER REQUEST: Fill Col 1 first to use more space */
+        column-fill: auto
+            !important; /* USER REQUEST: Fill Col 1 first to use more space */
     }
 
     /* Space optimization */
@@ -922,14 +922,26 @@ html {
 
     /* Paper Specific Heights to guide 'column-fill: auto' */
     /* Further reduced heights (approx -10mm) to be perfectly safe against manual header overflows */
-    .print-a4 .list-1week-print-cols { height: 200mm !important; }
-    .print-b4 .list-1week-print-cols { height: 265mm !important; }
-    .print-a3 .list-1week-print-cols { height: 335mm !important; }
+    .print-a4 .list-1week-print-cols {
+        height: 200mm !important;
+    }
+    .print-b4 .list-1week-print-cols {
+        height: 265mm !important;
+    }
+    .print-a3 .list-1week-print-cols {
+        height: 335mm !important;
+    }
 
     /* Paper Specific Max-Widths */
-    .print-a4 #list-view-printable { max-width: 190mm !important; }
-    .print-b4 #list-view-printable { max-width: 230mm !important; }
-    .print-a3 #list-view-printable { max-width: 277mm !important; }
+    .print-a4 #list-view-printable {
+        max-width: 190mm !important;
+    }
+    .print-b4 #list-view-printable {
+        max-width: 230mm !important;
+    }
+    .print-a3 #list-view-printable {
+        max-width: 277mm !important;
+    }
 
     .list-day-block {
         margin-bottom: 24px !important;
@@ -939,6 +951,7 @@ html {
 
 /* --- Dept List View Table --- */
 #dept-view-table {
+    border-collapse: separate !important;
     border-spacing: 0;
     min-width: 100%;
 }
@@ -958,11 +971,12 @@ html {
     min-width: 50px;
     position: sticky;
     left: 0;
-    z-index: 20;
+    z-index: 25;
     background-color: #f9fafb;
     text-align: center;
     font-weight: bold;
     border-right: 2px solid #d1d5db; /* Stronger divide */
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05); /* Visual layer separation */
 }
 
 /* Department Column */
@@ -976,30 +990,37 @@ html {
 #dept-view-table thead th {
     position: sticky;
     top: 0;
-    z-index: 30;
+    z-index: 40;
     background-color: #f3f4f6;
     color: #374151;
     font-weight: 700;
     text-align: center;
     vertical-align: middle;
-    box-shadow: inset 0 -1px 0 #e5e7eb; /* Keep internal border visible if needed */
-    font-size: 14px !important; /* Unified header font size for screen (aligned with dept names) */
+    box-shadow: inset 0 -1px 0
+        #e5e7eb; /* Keep internal border visible if needed */
+    font-size: 14px
+        !important; /* Unified header font size for screen (aligned with dept names) */
 }
 
 #dept-view-table thead .col-date {
-    z-index: 40; /* Higher than other header cells */
+    z-index: 50; /* Top-most corner cell */
     left: 0;
 }
 
 /* Special Days */
-#dept-view-table tr.row-sunday { background-color: #fef2f2; }
-#dept-view-table tr.row-saturday { background-color: #eff6ff; }
+#dept-view-table tr.row-sunday {
+    background-color: #fef2f2;
+}
+#dept-view-table tr.row-saturday {
+    background-color: #eff6ff;
+}
 /* Final Solution: Gradient Background Divider (Bypasses border collapse & z-index issues) */
 /* Sunday: Draw 1px black line at the BOTTOM using background gradient */
 #dept-view-table tr.row-sunday td,
 #dept-view-table tr.row-sunday th,
 #dept-view-table tr.row-sunday .col-date {
-    background-image: linear-gradient(to top, #000000 1px, transparent 1px) !important;
+    background-image: linear-gradient(to top, #000000 1px, transparent 1px)
+        !important;
     background-size: 100% 100% !important;
     background-repeat: no-repeat !important;
     border-bottom: none !important; /* Visual cleanup */
@@ -1014,7 +1035,8 @@ html {
 #dept-view-table tr.row-sunday + tr td,
 #dept-view-table tr.row-sunday + tr th,
 #dept-view-table tr.row-sunday + tr .col-date {
-    background-image: linear-gradient(to bottom, #000000 1px, transparent 1px) !important;
+    background-image: linear-gradient(to bottom, #000000 1px, transparent 1px)
+        !important;
     background-size: 100% 100% !important;
     background-repeat: no-repeat !important;
     border-top: none !important;
@@ -1022,13 +1044,19 @@ html {
     print-color-adjust: exact !important;
 }
 
-#dept-view-table tr.row-sunday .col-date { 
-    color: #ef4444; 
-    background-color: #fef2f2; 
+#dept-view-table tr.row-sunday .col-date {
+    color: #ef4444;
+    background-color: #fef2f2;
 }
 /* No need to re-declare background/borders for .col-date as they are included above */
-#dept-view-table tr.row-saturday .col-date { color: #3b82f6; background-color: #eff6ff; }
-#dept-view-table tr.row-holiday .col-date { color: #e11d48; background-color: #fff1f2; }
+#dept-view-table tr.row-saturday .col-date {
+    color: #3b82f6;
+    background-color: #eff6ff;
+}
+#dept-view-table tr.row-holiday .col-date {
+    color: #e11d48;
+    background-color: #fff1f2;
+}
 
 /* Event Item inside cell */
 .dept-event-item {
@@ -1067,7 +1095,11 @@ html {
     }
 
     /* Hide global elements */
-    #main-header, footer, .no-print, #dept-print-footer, #dept-view-table tfoot {
+    #main-header,
+    footer,
+    .no-print,
+    #dept-print-footer,
+    #dept-view-table tfoot {
         display: none !important;
         height: 0 !important;
         border: none !important;
@@ -1089,7 +1121,7 @@ html {
     }
 
     #dept-view-table {
-        table-layout: fixed !important; 
+        table-layout: fixed !important;
         width: 100% !important;
         max-width: 100% !important;
         border-collapse: collapse !important;
@@ -1102,7 +1134,7 @@ html {
     #dept-view-table .col-date {
         width: 35px !important; /* Reduced to gain ~3mm of space */
     }
-    
+
     #dept-view-table .col-dept {
         width: auto !important; /* Equal distribution of remaining space */
     }
@@ -1132,7 +1164,8 @@ html {
         position: static !important;
         box-shadow: none !important;
         outline: none !important;
-        background-color: transparent !important; /* Prevent bleeding into border */
+        background-color: transparent
+            !important; /* Prevent bleeding into border */
     }
 
     #dept-view-table td.col-date {
@@ -1145,7 +1178,7 @@ html {
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
         vertical-align: middle !important;
-        font-size: 14px !important; 
+        font-size: 14px !important;
     }
 
     #dept-view-table thead th.col-date {
@@ -1159,7 +1192,8 @@ html {
     #dept-view-table tr {
         page-break-inside: avoid !important;
         break-inside: avoid !important;
-        background-color: transparent !important; /* Reset stripe/holiday colors for clean lines */
+        background-color: transparent
+            !important; /* Reset stripe/holiday colors for clean lines */
         border: none !important;
     }
 

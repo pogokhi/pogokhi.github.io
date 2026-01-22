@@ -166,13 +166,13 @@
     #dept-view-table tbody td:first-child {
         position: sticky !important;
         left: 0 !important;
-        z-index: 10 !important;
+        z-index: 25 !important;
         background-color: #f9fafb !important; /* Match table background */
         box-shadow: 2px 0 5px rgba(0,0,0,0.05); /* Subtle shadow to indicate scroll */
     }
 
     #dept-view-table thead th:first-child {
-        z-index: 20 !important; /* Stay above body sticky cells */
+        z-index: 50 !important; /* Stay above body sticky cells AND other header cells */
     }
 
     /* 4. FullCalendar Mobile Adjustments */
