@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS public.schedules (
     dept_name text,        -- Backup name in case of dept deletion
     description text,
     visibility text DEFAULT 'public', -- 'public', 'internal', 'dept'
-    author_id uuid REFERENCES auth.users(id), -- Changed from created_by based on reverse engineering
+    author_id uuid REFERENCES auth.users(id) ON DELETE SET NULL, -- Allow user deletion while keeping schedules
     is_printable boolean DEFAULT true,
     weekend text,          -- 'on' or null
     created_at timestamp with time zone DEFAULT now(),
@@ -171,7 +171,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON ROUTINE
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- 1. Create Users in auth.users
--- Admin User: admin@pogokhi.edu / 12345678
+-- Admin User: admin@pogok.hs.kr / 12345678
 INSERT INTO auth.users (id, instance_id, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at, role, aud, confirmation_token)
 VALUES (
     'a0000000-0000-0000-0000-000000000001', 
@@ -188,7 +188,7 @@ VALUES (
     ''
 ) ON CONFLICT (id) DO NOTHING;
 
--- Teacher User: teacher@pogokhi.edu / 12345678
+-- Teacher User: teacher@pogok.hs.kr / 12345678
 INSERT INTO auth.users (id, instance_id, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at, role, aud, confirmation_token)
 VALUES (
     'a0000000-0000-0000-0000-000000000002', 
@@ -205,7 +205,7 @@ VALUES (
     ''
 ) ON CONFLICT (id) DO NOTHING;
 
--- Head Teacher User: head@pogokhi.edu / 12345678
+-- Head Teacher User: head@pogok.hs.kr / 12345678
 INSERT INTO auth.users (id, instance_id, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at, role, aud, confirmation_token)
 VALUES (
     'a0000000-0000-0000-0000-000000000003', 
@@ -227,10 +227,10 @@ VALUES (
 INSERT INTO public.user_roles (user_id, email, role, status)
 VALUES 
     -- Admin
-    ('a0000000-0000-0000-0000-000000000001', 'admin@pogokhi.edu', 'admin', 'active'),
+    ('a0000000-0000-0000-0000-000000000001', 'admin@pogok.hs.kr', 'admin', 'active'),
     -- Teacher
-    ('a0000000-0000-0000-0000-000000000002', 'teacher@pogokhi.edu', 'teacher', 'active'),
+    ('a0000000-0000-0000-0000-000000000002', 'teacher@pogok.hs.kr', 'teacher', 'active'),
     -- Head Teacher
-    ('a0000000-0000-0000-0000-000000000003', 'head@pogokhi.edu', 'head_teacher', 'active')
+    ('a0000000-0000-0000-0000-000000000003', 'head@pogok.hs.kr', 'head_teacher', 'active')
 ON CONFLICT (user_id) DO UPDATE 
 SET role = EXCLUDED.role, status = EXCLUDED.status;
