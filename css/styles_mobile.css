@@ -103,7 +103,7 @@
     /* 3. Calendar Button (Dept & List): MOVED TO HEADER (Fixed Position) */
     #btn-dept-calendar, #btn-list-calendar {
         position: fixed !important;
-        top: 10.5px !important; /* Fine-tuned from 11px (too low) and 10px (too high) */
+        top: 10px !important; /* Fine-tuned based on user request */
         right: 84px !important; /* 16px(Pad) + 62px(Logout) + 6px(Gap) */
         z-index: 50 !important;
         height: 24px !important;
