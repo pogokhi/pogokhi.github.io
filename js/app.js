@@ -272,11 +272,13 @@ const App = {
             }
 
             // 2. Fetch Role Info
-            const { data, error: fetchError } = await window.SupabaseClient.supabase
+            const { data: roleRecords, error: fetchError } = await window.SupabaseClient.supabase
                 .from('user_roles')
                 .select('role, status')
                 .eq('user_id', authUser.id)
-                .single();
+                .limit(1);
+
+            const data = (roleRecords && roleRecords.length > 0) ? roleRecords[0] : null;
 
             this.state.user = authUser;
 
@@ -3135,17 +3137,19 @@ const App = {
             .select('*');
 
         if (targetYear) {
-            query = query.eq('academic_year', targetYear).maybeSingle();
+            query = query.eq('academic_year', targetYear).limit(1);
         } else {
-            // Use maybeSingle() instead of single() to avoid 406 error if table is empty
-            query = query.order('academic_year', { ascending: false }).limit(1).maybeSingle();
+            // Use limit(1) instead of single()/maybeSingle() to strictly avoid 406 console errors
+            query = query.order('academic_year', { ascending: false }).limit(1);
         }
 
-        const { data: settings, error } = await query;
-        if (error && error.code !== 'PGRST116') {
+        const { data: settingsItems, error } = await query;
+        if (error) {
             console.error('Error fetching settings:', error);
             return {};
         }
+
+        const settings = (settingsItems && settingsItems.length > 0) ? settingsItems[0] : null;
 
         const result = settings || {};
         
