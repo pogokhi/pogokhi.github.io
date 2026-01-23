@@ -450,7 +450,7 @@ const App = {
     initLoginView: function () {
         const form = document.getElementById('login-form');
         const errorMsg = document.getElementById('login-error');
-        const DOMAIN = 'pogok.hs.kr'; // Default domain for short IDs
+        const DOMAIN = 'goe.edu'; // Default domain for short IDs
 
         form.onsubmit = async (e) => {
             e.preventDefault();
