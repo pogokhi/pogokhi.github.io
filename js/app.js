@@ -2374,6 +2374,18 @@ const App = {
             },
 
             dayCellDidMount: (arg) => {
+                const dateStr = this.formatLocal(arg.date);
+                const canEdit = this.state.role === 'admin' || this.state.role === 'head_teacher' || this.state.role === 'head';
+
+                if (canEdit) {
+                    arg.el.style.cursor = 'pointer';
+                    arg.el.onclick = (e) => {
+                        // Avoid triggering if clicking on an actual schedule item (already has stopPropagation)
+                        if (e.target.closest('.schedule-item')) return;
+                        this.openScheduleModal(null, dateStr);
+                    };
+                }
+
                 // Remove default FullCalendar containers that might cause whitespace or layout issues
                 const eventsContainer = arg.el.querySelector('.fc-daygrid-day-events');
                 // const bottomContainer = arg.el.querySelector('.fc-daygrid-day-bottom'); // KEEP: Used for spacing
@@ -4963,12 +4975,7 @@ const App = {
         const container = document.createElement('div');
         container.className = "flex flex-col w-full justify-start items-stretch";
         container.style.height = "100%";
-        if (canEdit) {
-            container.style.cursor = 'pointer';
-            container.onclick = () => {
-                this.openScheduleModal(null, dateStr);
-            };
-        }
+        // CLICK HANDLER MOVED TO dayCellDidMount (td-level)
 
         // MASKING: Ensure the whole cell is opaque white (or today color) to hide FullCalendar background events
         // This reinforces the "color restricted to header" rule.
@@ -4999,6 +5006,7 @@ const App = {
         }
 
         headerGroup.style.backgroundColor = cellBgColor;
+        // pointerEvents: 'none' REMOVED - handled by td-level click
 
         headerGroup.style.paddingTop = '4px'; // COVERAGE: Padding is part of the colored area
         // Separation from content below, OUTSIDE the colored area
@@ -5031,9 +5039,9 @@ const App = {
         dateWrapper.appendChild(dayLink);
         headerRow.appendChild(dateWrapper);
 
-        // [CLICK] Prevent "New Schedule" modal when clicking the date link specifically
+        // [CLICK] Allow click to bubble up to the container's onclick handler
         dayLink.onclick = (e) => {
-            if (canEdit) e.stopPropagation();
+            // No stopPropagation here, let it reach the parent container
         };
 
         // 2. Holiday Names (Right)
@@ -5094,6 +5102,7 @@ const App = {
         divider.className = 'calendar-dashed-divider';
         divider.style.margin = '1px 8px 0px 8px'; // Bottom margin is 0 here to keep color inside
         divider.style.borderTop = '1px dashed #d1d5db'; // gray-300
+        // pointerEvents: 'none' REMOVED
         headerGroup.appendChild(divider);
 
         container.appendChild(headerGroup);
@@ -5142,6 +5151,7 @@ const App = {
                     evDiv.className = "schedule-item cursor-pointer hover:bg-gray-100 rounded px-1 py-0.5 break-words flex items-start leading-tight";
                     evDiv.style.fontSize = '10px';
                     evDiv.style.color = '#374151'; // Explicitly set dark grey color
+                    // pointerEvents: 'auto' REMOVED
 
                     // Hide non-printable event during printing
                     if (ev.extendedProps.isPrintable === false) {
