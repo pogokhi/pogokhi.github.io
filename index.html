@@ -11,16 +11,16 @@
 
     <!-- 1. External Libraries (CDN) -->
     <!-- Supabase JS -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
 
     <!-- FullCalendar (Core + Plugins) -->
-    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js" crossorigin="anonymous"></script>
 
     <!-- SheetJS (Excel Import/Export) -->
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js" crossorigin="anonymous"></script>
 
     <!-- Korean Lunar Calendar Support -->
-    <script src="https://cdn.jsdelivr.net/npm/korean-lunar-calendar@0.3.6/dist/korean-lunar-calendar.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/korean-lunar-calendar@0.3.6/dist/korean-lunar-calendar.min.js" crossorigin="anonymous"></script>
 
     <!-- Tailwind CSS (for rapid UI development, configured for production-like usage via script if needed, utilizing CDN for now) -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -55,7 +55,7 @@
     <script src="js/utils/helpers.js?v=3.18" defer></script>
 
     <!-- App Entry -->
-    <script src="js/app.js?v=3.18" defer></script>
+    <script src="js/app.js?v=2.0.2" defer></script>
 </head>
 
 <body class="bg-gray-50 text-gray-800 font-sans antialiased">
@@ -69,12 +69,25 @@
                     <span class="material-symbols-outlined text-purple-600 text-3xl">calendar_month</span>
                     <h1 class="text-xl font-bold tracking-tight text-gray-900">PogokLink <span
                             class="text-xs font-normal text-gray-500 ml-1">v2.0</span></h1>
+                    <!-- 1. Greeting & Admin (Moved to Right Side) -->
+                    <!-- 2. View Actions (Calendar btn moves to Right Side) -->
                 </div>
 
-                <div id="auth-status" class="flex items-center gap-4">
-                    <!-- Dynamic Auth Content -->
-                    <button id="btn-login"
-                        class="text-sm px-3 py-1 border border-gray-300 rounded hover:bg-gray-100">로그인</button>
+                <!-- Right Side Group: User Info + Auth Button -->
+                <div class="flex items-center gap-2">
+                    <!-- 1. Greeting & Admin -->
+                    <div id="header-user-info" class="flex items-center gap-1.5"></div>
+
+                    <!-- 2. View Actions (Calendar Button) -->
+                    <div id="view-actions" class="flex items-center gap-1.5"></div>
+
+
+                    <!-- 2. Auth Button -->
+                    <div id="header-auth-btn" class="flex items-center gap-2">
+                        <!-- Dynamic Auth Content -->
+                        <button id="btn-header-login"
+                            class="text-sm px-3 py-1 border border-gray-300 rounded hover:bg-gray-100">로그인</button>
+                    </div>
                 </div>
             </div>
         </header>

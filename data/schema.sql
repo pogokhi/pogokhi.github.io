@@ -9,18 +9,36 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE TABLE IF NOT EXISTS public.user_roles (
     user_id uuid NOT NULL PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     email text,
-    role text DEFAULT 'guest', -- 'admin', 'teacher', 'head_teacher', 'guest'
-    status text DEFAULT 'pending', -- 'active', 'pending'
-    last_login timestamp with time zone
+    role text DEFAULT 'guest', -- 'admin', 'teacher', 'dept', 'head', 'guest'
+    status text DEFAULT 'pending', -- 'active', 'pending', 'rejected'
+    last_login timestamp with time zone,
+    CONSTRAINT user_roles_role_check CHECK (role IN ('admin', 'teacher', 'dept', 'head', 'guest'))
 );
 
 ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
+
+-- Helper function to break recursion (Security Definer)
+-- SECURITY DEFINER allows the function to run with owner privileges, bypassing RLS.
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS boolean AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.user_roles
+    WHERE user_id = auth.uid() AND role = 'admin'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- user_roles Policies
 CREATE POLICY "Public Read User Roles" ON public.user_roles FOR SELECT TO public USING (true);
 -- Explicit policy for authenticated users to ensure 403 is avoided for self-lookup
 CREATE POLICY "Authenticated Read Self" ON public.user_roles FOR SELECT TO authenticated 
     USING (user_id = (select auth.uid()));
+
+-- Allow admins to update any user role/status (Non-recursive version)
+CREATE POLICY "Admins can update all" ON public.user_roles 
+FOR UPDATE TO authenticated 
+USING (is_admin());
 
 -- Users can update their own last_login (handled via upsert in syncUser)
 CREATE POLICY "Users Update Own Role Meta" ON public.user_roles FOR UPDATE TO authenticated 
@@ -153,7 +171,7 @@ ALTER TABLE public.error_logs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public Insert Logs" ON public.error_logs FOR INSERT TO public WITH CHECK (true);
 -- Read policy for Admins only
 CREATE POLICY "Admins Read Logs" ON public.error_logs FOR SELECT TO authenticated 
-    USING ((select role from public.user_roles where user_id = (select auth.uid())) = 'admin');
+    USING (is_admin());
 
 
 -- [Indexes]
