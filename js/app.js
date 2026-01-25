@@ -114,11 +114,15 @@ const App = {
     },
 
     // Clear Cache
+    // Clear Cache
     clearCache: function () {
+        this.state.user = null;
+        this.state.role = null;
+        this.state.status = null;
         this.state.cache.schedules = null;
         this.state.cache.departments = null;
         this.state.cache.basicSchedules = {};
-        console.log("🧹 Cache cleared");
+        console.log("🧹 Cache cleared & Auth State Reset");
     },
 
     // Initialization
@@ -190,52 +194,69 @@ const App = {
 
     // Helper: Capture Current Date from Active View
     captureCurrentDate: function () {
-        // If we are currently in a view, capture its date to state
-        if (this.state.viewMode === 'calendar' && this.state.calendar) {
-            return this.state.calendar.getDate();
-        }
-        if (this.state.viewMode === 'dept_list' && this.state.deptViewDate) {
-            return new Date(this.state.deptViewDate);
-        }
-        if (this.state.viewMode === 'list' && this.state.listViewStart) {
-            // Use the Representative Date (e.g. Wednesday of the week)
-            // so if we switch to month view, we land on the correct month
-            const d = new Date(this.state.listViewStart);
-            d.setDate(d.getDate() + 3);
-            return d;
+        try {
+            // If we are currently in a view, capture its date to state
+            if (this.state.viewMode === 'calendar' && this.state.calendar) {
+                // Check if getDate exists to prevent crash
+                return (typeof this.state.calendar.getDate === 'function') 
+                    ? this.state.calendar.getDate() 
+                    : new Date();
+            }
+            if (this.state.viewMode === 'dept_list' && this.state.deptViewDate) {
+                return new Date(this.state.deptViewDate);
+            }
+            if (this.state.viewMode === 'list' && this.state.listViewStart) {
+                // Use the Representative Date (e.g. Wednesday of the week)
+                const d = new Date(this.state.listViewStart);
+                d.setDate(d.getDate() + 3);
+                return d;
+            }
+        } catch (e) {
+            console.warn("Date capture failed, defaulting to now:", e);
         }
         return new Date(); // Default to Now
     },
 
     navigate: function (viewName, replace = false) {
-        // [SYNC] Capture date from current view before switching
-        const sharedDate = this.captureCurrentDate();
+        try {
+            // [SYNC] Capture date from current view before switching
+            const sharedDate = this.captureCurrentDate();
 
-        // [SYNC] Propagate to Target View State
-        if (viewName === 'calendar') {
-            this.state.initialDate = sharedDate;
-        } else if (viewName === 'dept_list') {
-            // Set 1st of month for Dept View logic usually, but specific date is fine
-            this.state.deptViewDate = sharedDate;
-        } else if (viewName === 'list') {
-            // Calculate Monday of the week containing sharedDate
-            const d = new Date(sharedDate);
-            const day = d.getDay();
-            const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday
-            this.state.listViewStart = new Date(d.setDate(diff));
-            this.state.listViewWeeks = this.state.listViewWeeks || 1; // Maintain week count preference
+            // [SYNC] Propagate to Target View State
+            if (viewName === 'calendar') {
+                this.state.initialDate = sharedDate;
+            } else if (viewName === 'dept_list') {
+                // Set 1st of month for Dept View logic usually, but specific date is fine
+                this.state.deptViewDate = sharedDate;
+            } else if (viewName === 'list') {
+                // Calculate Monday of the week containing sharedDate
+                const d = new Date(sharedDate);
+                const day = d.getDay();
+                const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday
+                this.state.listViewStart = new Date(d.setDate(diff));
+                this.state.listViewWeeks = this.state.listViewWeeks || 1; // Maintain week count preference
+            }
+
+            this.state.viewMode = viewName;
+            
+            try {
+                localStorage.setItem('pogok_last_view', viewName);
+            } catch (e) {
+                console.warn("LocalStorage failed (safely ignored):", e);
+            }
+
+            if (replace) {
+                history.replaceState({ view: viewName }, '', window.location.pathname);
+            } else {
+                history.pushState({ view: viewName }, '', window.location.pathname);
+            }
+
+            this.loadView(viewName);
+        } catch (err) {
+            console.error("Navigation Critical Error:", err);
+            alert("페이지 이동 중 오류가 발생했습니다: " + err.message);
+            // Fallback: Force reload if serious (optional, but let's just alert for now)
         }
-
-        this.state.viewMode = viewName;
-        localStorage.setItem('pogok_last_view', viewName);
-
-        if (replace) {
-            history.replaceState({ view: viewName }, '', window.location.pathname);
-        } else {
-            history.pushState({ view: viewName }, '', window.location.pathname);
-        }
-
-        this.loadView(viewName);
     },
 
     checkAuth: async function () {
@@ -314,10 +335,13 @@ const App = {
 
         if (!canEnter) {
             // If they are on a protected view but aren't authorized -> Go to pending
-            if (this.state.viewMode !== 'pending' && this.state.viewMode !== 'login' && this.state.viewMode !== 'calendar') {
-                console.warn(`[Auth GATING] Unauthorized access to ${this.state.viewMode}. Redirecting to pending.`);
-                this.navigate('pending');
-            }
+            // [SECURITY FIX] If unauthorized (pending/rejected), REJECT ALL ACCESS.
+            // Rule: Logout FIRST, then move to pending screen.
+            console.warn(`[Auth GATING] User ${session.user.email} is ${status}. Logging out and redirecting to pending.`);
+            
+            await window.SupabaseClient.supabase.auth.signOut();
+            this.clearCache();
+            this.navigate('pending');
         } else {
             // [SUCCESS] Authorized! 
             // EMERGENCY REDIRECT: If they are authorized but stuck on the 'pending' page, pull them out.
@@ -430,8 +454,9 @@ const App = {
         // State consistency fallback
         if (!this.state.user && session?.user) this.state.user = session.user;
 
-        const authContainer = document.getElementById('auth-status');
-        if (!authContainer) return;
+        const infoContainer = document.getElementById('header-user-info');
+        const authBtnContainer = document.getElementById('header-auth-btn');
+        if (!infoContainer || !authBtnContainer) return;
 
         this._lastUiUpdateEmail = currentUserEmail;
         this._lastUiUpdateRole = currentRole;
@@ -449,42 +474,61 @@ const App = {
             }
 
             const adminBtn = isAdmin
-                ? `<button id="btn-admin" class="text-sm px-3 py-1 border border-purple-200 text-purple-700 rounded bg-purple-50 hover:bg-purple-100 ml-2">관리자</button>`
+                ? `<button id="btn-admin" class="text-sm px-3 py-1 border border-purple-200 text-purple-700 rounded bg-purple-50 hover:bg-purple-100">관리자</button>`
                 : '';
 
-            authContainer.innerHTML = `
-                <span class="text-sm text-gray-700 hidden sm:inline">안녕하세요, <strong>${userEmail}</strong>님</span>
-                ${adminBtn}
-                <button id="btn-logout" class="text-sm px-3 py-1 border border-gray-300 rounded hover:bg-gray-100 ml-2">로그아웃</button>
-            `;
+        // [FIX] Trim whitespace to prevent anonymous flex items
+        infoContainer.innerHTML = `<span class="text-sm text-gray-700 hidden sm:inline">안녕하세요, <strong>${userEmail}</strong>님</span>${adminBtn}`;
+        authBtnContainer.innerHTML = `<button id="btn-logout" class="text-sm px-3 py-1 border border-gray-300 rounded hover:bg-gray-100">로그아웃</button>`;
 
-            const logoutBtn = document.getElementById('btn-logout');
-            if (logoutBtn) {
-                logoutBtn.onclick = async () => {
-                    if (!confirm('로그아웃 하시겠습니까?')) return;
-                    await window.SupabaseClient.supabase.auth.signOut();
-                    this.clearCache();
-                    window.location.replace(window.location.pathname + '#calendar');
-                };
-            }
-
-            if (isAdmin) {
-                const btnAdmin = document.getElementById('btn-admin');
-                if (btnAdmin) {
-                    btnAdmin.onclick = () => this.navigate('admin');
-                }
-            }
-        } else {
-            authContainer.innerHTML = `
-            <button id="btn-login" class="text-sm px-3 py-1 border border-gray-300 rounded hover:bg-gray-100">로그인</button>
-        `;
-            document.getElementById('btn-login').addEventListener('click', () => {
-                this.navigate('login');
-            });
+        const logoutBtn = document.getElementById('btn-logout');
+        if (logoutBtn) {
+            logoutBtn.onclick = async () => {
+                if (!confirm('로그아웃 하시겠습니까?')) return;
+                await window.SupabaseClient.supabase.auth.signOut();
+                this.clearCache();
+                window.location.replace(window.location.pathname + '#calendar');
+            };
         }
 
-        // Update other UI elements based on role
-        this.updateAccessControls();
+        if (isAdmin) {
+            const btnAdmin = document.getElementById('btn-admin');
+            if (btnAdmin) {
+                btnAdmin.onclick = () => this.navigate('admin');
+            }
+        }
+    } else {
+        infoContainer.innerHTML = '';
+        authBtnContainer.innerHTML = `<button id="btn-header-login" class="text-sm px-3 py-1 border border-gray-300 rounded hover:bg-gray-100" onclick="App.navigate('login')">로그인</button>`;
+    }
+
+    // Update other UI elements based on role
+    this.updateAccessControls();
+
+    // [FIX] Hide empty containers explicitly (style.display) to prevent double gaps
+    if (infoContainer.children.length === 0 && !infoContainer.textContent.trim()) {
+        infoContainer.style.display = 'none';
+        infoContainer.classList.add('hidden');
+    } else {
+        infoContainer.style.display = 'flex';
+        infoContainer.classList.remove('hidden');
+    }
+    },
+
+    // Helper: Check if current user has permission to add/edit schedules
+    canAddSchedule: function () {
+        // [SECURITY] Strict check: Must have a logged-in user object
+        if (!this.state.user) return false;
+
+        const role = String(this.state.role || '').trim().toLowerCase();
+        const status = String(this.state.status || '').trim().toLowerCase();
+        const isAdmin = role === 'admin';
+        const isActive = status === 'active';
+
+        // Allowed roles: admin, head, head_teacher, dept
+        const isAuthorizedRole = ['admin', 'head', 'head_teacher', 'dept'].includes(role);
+
+        return (isAdmin || (isActive && isAuthorizedRole));
     },
 
     updateAccessControls: function () {
@@ -492,10 +536,7 @@ const App = {
         const btnAddSchedule = document.getElementById('btn-add-schedule');
 
         if (btnAddSchedule) {
-            const isActive = this.state.status === 'active' || this.state.role === 'admin';
-            const canAdd = isActive && (this.state.role === 'admin' || this.state.role === 'head' || this.state.role === 'head_teacher' || this.state.role === 'dept');
-
-            if (canAdd) {
+            if (this.canAddSchedule()) {
                 btnAddSchedule.classList.remove('hidden');
             } else {
                 btnAddSchedule.classList.add('hidden');
@@ -542,7 +583,7 @@ const App = {
             // Double check for actual session to be safe
             const { data: { session } } = await window.SupabaseClient.supabase.auth.getSession();
             if (!session && viewName !== 'calendar') {
-                this.navigate('login');
+                this.navigate('login', true);
                 return;
             }
 
@@ -571,7 +612,7 @@ const App = {
                 const currentRole = String(this.state.role || '').trim().toLowerCase();
                 if (!this.state.user || currentRole !== 'admin') {
                     alert("접근 권한이 없습니다.");
-                    this.navigate('calendar');
+                    this.navigate('calendar', true);
                     return;
                 }
 
@@ -592,8 +633,8 @@ const App = {
                 container.innerHTML = html;
                 this.initPendingView();
             } catch (e) {
-                console.error("Failed to load pending page", e);
-                container.innerHTML = "<p class='text-red-500'>페이지를 로드할 수 없습니다.</p>";
+                console.error("Failed to load pending view", e);
+                container.innerHTML = "<p class='text-red-500'>목록 로딩 실패</p>";
             }
         } else if (viewName === 'login') {
             try {
@@ -607,6 +648,9 @@ const App = {
             }
         }
 
+        // [HEADER SYNC] Move view-specific buttons (e.g., Calendar btn) to global header for unified layout
+        this.syncHeaderActions();
+
         // Re-run Auth UI update to bind header buttons if they exist
         // This is crucial because header buttons might be part of the layout, 
         // but if we have view-specific buttons (like in login page), they need specific init.
@@ -614,6 +658,33 @@ const App = {
 
         // Safety check: ensure header auth UI is consistent
         this.updateAuthUI(this.state.user ? { user: this.state.user } : null);
+        this.updateAccessControls(); // [FIX] Ensure view-specific buttons are updated even if auth state didn't change
+    },
+
+    syncHeaderActions: function () {
+        const headerActions = document.getElementById('view-actions');
+        if (!headerActions) return;
+
+        // Clear existing view-specific actions
+        headerActions.innerHTML = '';
+
+        // Check if current view has a calendar return button (e.g. #btn-dept-calendar)
+        const viewCalendarBtn = document.querySelector('#btn-dept-calendar, #btn-list-calendar');
+        if (viewCalendarBtn) {
+            // Un-hide if it was hidden by some mobile-specific toggle logic
+            viewCalendarBtn.style.display = 'flex';
+            // Move it to header
+            headerActions.appendChild(viewCalendarBtn);
+        }
+
+        // [FIX] Hide empty container explicitly to prevent double gaps
+        if (headerActions.children.length === 0) {
+            headerActions.style.display = 'none';
+            headerActions.classList.add('hidden');
+        } else {
+            headerActions.style.display = 'flex';
+            headerActions.classList.remove('hidden');
+        }
     },
 
     initLoginView: function () {
@@ -637,13 +708,15 @@ const App = {
             errorMsg.classList.add('hidden');
 
             try {
+                // [FIX] Clear old cache BEFORE login to prevent race with onAuthStateChange
+                this.clearCache();
+
                 const { data, error } = await window.SupabaseClient.supabase.auth.signInWithPassword({
                     email,
                     password
                 });
 
                 if (error) throw error;
-                this.clearCache();
 
                 // [STATUS CHECK] We need to ensure we have the status before redirecting
                 // But onAuthStateChange will trigger syncUser.
@@ -660,7 +733,9 @@ const App = {
     initPendingView: function () {
         const btnReturn = document.getElementById('btn-return-main');
         if (btnReturn) {
-            btnReturn.onclick = () => {
+            btnReturn.onclick = async () => {
+                await window.SupabaseClient.supabase.auth.signOut();
+                this.clearCache();
                 this.navigate('calendar');
             };
         }
@@ -2326,43 +2401,49 @@ const App = {
     },
 
     updateUserRole: async function (userId, newRole) {
-        if (!confirm("권한을 변경하시겠습니까?")) {
-            this.loadAdminUsers(); // Revert UI
-            return;
-        }
-
-        const { error } = await window.SupabaseClient.supabase
+        // [UX] Apply immediately without confirmation
+        const { data, error } = await window.SupabaseClient.supabase
             .from('user_roles')
             .update({ role: newRole })
-            .eq('user_id', userId);
+            .eq('user_id', userId)
+            .select();
 
         if (error) {
+            console.error("Role Update Error:", error);
             alert("업데이트 실패: " + error.message);
+            await this.loadAdminUsers();
+        } else if (!data || data.length === 0) {
+            console.warn("Role update failed: 0 rows affected. RLS issue?");
+            alert("권한 업데이트가 적용되지 않았습니다. (보안 정책 문제 가능성)");
+            await this.loadAdminUsers();
         } else {
-            this.loadAdminUsers(); // Refresh
+            console.log("Role updated successfully:", data);
+            await this.loadAdminUsers(); // Refresh
             this.logAction('UPDATE_ROLE', 'user_roles', userId, { newRole });
         }
     },
 
     updateUserStatus: async function (userId, newStatus) {
-        const statusMap = { 'active': '승인', 'pending': '대기', 'rejected': '거부' };
-        const statusName = statusMap[newStatus] || newStatus;
-
-        if (!confirm(`사용자 상태를 '${statusName}'(으)로 변경하시겠습니까?`)) {
-            this.loadAdminUsers(); // Revert UI
-            return;
-        }
-
-        const { error } = await window.SupabaseClient.supabase
+        // [UX] Apply immediately without confirmation
+        const { data, error, count } = await window.SupabaseClient.supabase
             .from('user_roles')
             .update({ status: newStatus })
-            .eq('user_id', userId);
+            .eq('user_id', userId)
+            .select(); // Return updated rows to verify
 
         if (error) {
+            console.error("Update Error:", error);
             alert("업데이트 실패: " + error.message);
+            await this.loadAdminUsers();
+        } else if (!data || data.length === 0) {
+             console.warn("Update succeeded but no rows were affected. Possible RLS issue or ID mismatch.");
+             alert("업데이트가 적용되지 않았습니다. (권한 문제 가능성)");
+             await this.loadAdminUsers();
         } else {
-            this.loadAdminUsers(); // Refresh to reflect change
-            this.logAction('UPDATE_STATUS', 'user_roles', userId, { newStatus });
+             // Success
+             console.log("Update Success:", data);
+             await this.loadAdminUsers(); // Refresh to reflect change (colors etc)
+             this.logAction('UPDATE_STATUS', 'user_roles', userId, { newStatus });
         }
     },
 
@@ -2612,9 +2693,7 @@ const App = {
 
             dayCellDidMount: (arg) => {
                 const dateStr = this.formatLocal(arg.date);
-                const canEdit = this.state.role === 'admin' || this.state.role === 'head_teacher' || this.state.role === 'head';
-
-                if (canEdit) {
+                if (this.canAddSchedule()) {
                     arg.el.style.cursor = 'pointer';
                     arg.el.onclick = (e) => {
                         // Avoid triggering if clicking on an actual schedule item (already has stopPropagation)
@@ -2633,10 +2712,16 @@ const App = {
             },
 
             windowResize: (view) => {
-                this.distributeVerticalSpace();
+                // Throttle resize events to prevent freezing
+                if (this._resizeTimeout) clearTimeout(this._resizeTimeout);
+                this._resizeTimeout = setTimeout(() => {
+                    this.distributeVerticalSpace();
+                }, 500);
             },
             dateClick: (info) => {
-                this.openScheduleModal(null, info.dateStr);
+                if (this.canAddSchedule()) {
+                    this.openScheduleModal(null, info.dateStr);
+                }
             }
         });
 
@@ -2752,6 +2837,33 @@ const App = {
             this.state.listViewStart = new Date(t.setDate(diff));
             this.renderListView();
         };
+
+        // Initialize Router/History
+        window.onpopstate = (event) => {
+            if (event.state && event.state.view) {
+                this.loadView(event.state.view);
+            } else {
+                this.loadView('calendar'); // Default
+            }
+        };
+
+        // [FIX] Global Event Delegation for Login Button
+        // Catches click on #btn-header-login even if it is dynamic
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('#btn-header-login');
+            if (btn) {
+                e.preventDefault();
+                console.log("[Auth] Unique Login button clicked");
+                try {
+                    this.navigate('login');
+                } catch (err) {
+                    alert('이동 실패: ' + err.message);
+                }
+            }
+        });
+
+        // Initial Load
+        const pathHash = window.location.hash.replace('#', '');
 
         if (btnPrint) {
             btnPrint.onclick = () => {
@@ -2941,7 +3053,7 @@ const App = {
                     }
                 }
             });
-            return hInfos.length > 0 ? ` < span style = "color:red; font-size:11px; font-weight:normal;" > (${hInfos.join(', ')})</span > ` : '';
+            return hInfos.length > 0 ? `<span style="color:red; font-size:11px; font-weight:normal;"> (${hInfos.join(', ')})</span>` : '';
         };
 
         // Helper: Generate Page Header (Print & Screen)
@@ -2954,27 +3066,27 @@ const App = {
             // Print Header
             if (!isScreenOnly) {
                 html += `
-    < div class="text-center mb-4 hidden print:block" >
-                        <h1 class="text-3xl font-bold border-b-2 border-black pb-4 mb-2">주간 계획서</h1>
+                <div class="text-center mb-4 hidden print:block">
+                    <h1 class="text-3xl font-bold border-b-2 border-black pb-4 mb-2">주간 계획서</h1>
                         <div class="flex justify-between items-end">
                             <div class="text-[16px] font-bold">${rangeBase}</div>
                             <div class="text-[16px] font-bold">${sName}</div>
                         </div>
                         <div class="text-left mt-1 text-[11px] font-bold">${holidays}</div>
-                    </div >
+                    </div>
     `;
             }
             // Screen Header
             if (!isPrintOnly) {
                 html += `
-    < div class="text-center mb-8 print:hidden" >
-                        <h1 class="text-3xl font-bold border-b-2 border-gray-800 pb-4 mb-2">주간 계획서</h1>
+                <div class="text-center mb-8 print:hidden">
+                    <h1 class="text-3xl font-bold border-b-2 border-gray-800 pb-4 mb-2">주간 계획서</h1>
                         <div class="flex justify-between items-end">
                             <div class="text-[16px] font-bold text-gray-700">${rangeBase}</div>
                             <div class="text-[16px] font-bold text-gray-700">${sName}</div>
                         </div>
                         <div class="text-left mt-1 text-[11px] font-bold">${holidays}</div>
-                    </div >
+                    </div>
     `;
             }
             return html;
@@ -3081,7 +3193,7 @@ const App = {
                 const dateNumStr = String(dateObj.getDate()).padStart(2, '0');
 
                 dayHtml += `
-    < div class="list-day-block break-inside-avoid" >
+                <div class="list-day-block break-inside-avoid">
                         <div class="border-t-[3px] border-black bg-white pt-1 px-1 mb-2">
                             <span class="text-[12px] leading-[1.3] font-bold ${isRedDay ? 'text-red-600' : 'text-gray-900'}">
                                 ${yearStr}년 ${monthStr}월 ${dateNumStr}일 (${dayName}요일)
@@ -3107,9 +3219,9 @@ const App = {
                     groups[deptName].forEach(ev => {
                         dayHtml += `<li><span class="font-medium text-gray-900">${ev.title}</span>${ev.desc ? ` <span class="text-gray-500 text-[11px]">(${ev.desc})</span>` : ''}</li>`;
                     });
-                    dayHtml += `</ul></div > `;
+                    dayHtml += `</ul></div>`;
                 });
-                dayHtml += `</div ></div > `;
+                dayHtml += `</div></div>`;
             }
             dayHtmls.push(dayHtml);
         }
@@ -3133,7 +3245,7 @@ const App = {
             const week2Html = dayHtmls.slice(7, 14).join('');
 
             finalHtml = `
-    < !--Screen Version-- >
+    <!--Screen Version-->
                 <div class="print:hidden">
                     ${generateHeaderHtml(start, end)}
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
@@ -3142,7 +3254,7 @@ const App = {
                     </div>
                 </div>
 
-                <!--Print Version-- >
+                <!--Print Version-->
     <div class="hidden print:block">
         <div>
             ${generateHeaderHtml(w1Start, w1End, false, true)}
@@ -3266,17 +3378,17 @@ const App = {
         }
 
         // 1. Header
-        let headerHtml = `< tr > <th class="col-date" style="padding: 0 4px; vertical-align: middle; box-shadow: inset 0 -5px 0 #6b7280; height: 50px;">날짜</th>`;
+        let headerHtml = `<tr><th class="col-date" style="padding: 0 4px; vertical-align: middle; box-shadow: inset 0 -5px 0 #6b7280; height: 50px;">날짜</th>`;
         activeDepts.forEach(d => {
             const color = d.dept_color || '#ccc';
             const shortName = d.dept_short || d.dept_name.substring(0, 2);
             headerHtml += `
-    < th class="col-dept" style = "padding: 0 4px; vertical-align: middle; box-shadow: inset 0 -5px 0 ${color}; height: 50px;" >
+            <th class="col-dept" style="padding: 0 4px; vertical-align: middle; box-shadow: inset 0 -5px 0 ${color}; height: 50px;">
                     <div class="print:hidden">${d.dept_name}</div>
                     <div class="hidden print:block">${shortName}</div>
-                </th > `;
+                </th>`;
         });
-        headerHtml += `</tr > `;
+        headerHtml += `</tr>`;
         thead.innerHTML = headerHtml;
 
         // 2. Data
@@ -3318,11 +3430,11 @@ const App = {
 
             // Append holiday class instead of overwriting, using space separator
             if (holidayName) {
-                rowClass = rowClass ? `${rowClass} row - holiday` : 'row-holiday';
+                rowClass = rowClass ? `${rowClass} row-holiday` : 'row-holiday';
             }
 
-            bodyHtml += `< tr class="${rowClass}" > `;
-            bodyHtml += `< td class="col-date" > ${d} <br class="print:hidden"><span class="text-[10px] print:text-inherit">(${dayNames[dayNum]})</span></td>`;
+            bodyHtml += `<tr class="${rowClass}">`;
+            bodyHtml += `<td class="col-date">${d} <br class="print:hidden"><span class="text-[10px] print:text-inherit">(${dayNames[dayNum]})</span></td>`;
             activeDepts.forEach(dept => {
                 // 1. Get DB Schedules (Clone to allow injection)
                 // [FIX] 2-Step Matching: ID-based OR Name-based fallback for orphaned data
@@ -3398,14 +3510,14 @@ const App = {
                     deptSchedules = deptSchedules.filter(s => !s.id); // Keep only virtuals (no ID)
                 }
 
-                bodyHtml += `< td class="col-dept" > `;
+                bodyHtml += `<td class="col-dept">`;
                 deptSchedules.forEach(s => {
                     const desc = s.description ? ` (${s.description})` : '';
-                    bodyHtml += `< div class="dept-event-item" style = "border-left-color: ${dept.dept_color}" > ${s.title}${desc}</div > `;
+                    bodyHtml += `<div class="dept-event-item" style="border-left-color: ${dept.dept_color}">${s.title}${desc}</div>`;
                 });
-                bodyHtml += `</td > `;
+                bodyHtml += `</td>`;
             });
-            bodyHtml += `</tr > `;
+            bodyHtml += `</tr>`;
 
             curr.setDate(curr.getDate() + 1);
         }
@@ -3724,6 +3836,15 @@ const App = {
                 // GUEST VISIBILITY CHECK: Only show 'public'
                 if (!this.state.user && s.visibility !== 'public') return;
 
+                // [STRICT PRIVATE CHECK]
+                // If visibility is 'private', only Admin or Creator can see it.
+                if (s.visibility === 'private') {
+                    const isAdmin = this.state.role === 'admin';
+                    // We assume s.user_id is available from the fetch
+                    const isCreator = this.state.user && s.user_id && String(s.user_id) === String(this.state.user.id);
+                    if (!isAdmin && !isCreator) return;
+                }
+
                 const deptIdKey = s.dept_id ? String(s.dept_id) : null;
 
                 // [STRICT DEPT PRIVACY]
@@ -3786,7 +3907,7 @@ const App = {
         if (!container) return;
 
         container.innerHTML = departments.map(d => `
-    < div class="flex items-center gap-2" >
+    <div class="flex items-center gap-2">
         <input type="checkbox" id="dept-${d.id}" value="${d.id}" class="dept-checkbox rounded ${d.is_special ? 'text-purple-600' : 'text-blue-600'} focus:ring-purple-500" checked>
             <label for="dept-${d.id}" class="flex items-center gap-2 cursor-pointer w-full">
                 <span class="w-3 h-3 rounded-full" style="background-color: ${d.dept_color}"></span>
@@ -3811,6 +3932,11 @@ const App = {
     // --- Modal & CRUD Logic ---
 
     openScheduleModal: async function (eventId = null, defaultDate = null) {
+        // [SECURITY] Double check permissions for new events
+        if (!eventId && !this.canAddSchedule()) {
+            console.warn("[Security] Unauthorized attempt to open schedule modal");
+            return;
+        }
         // 1. Check Auth & Permissions
         if (!this.state.user) {
             alert('로그인이 필요한 기능입니다.');
@@ -4308,9 +4434,9 @@ const App = {
 
             const calendarTitle = document.querySelector('.fc-toolbar-title')?.textContent || '';
             printHeader.innerHTML = `
-    < div class="print-header-left" > ${calendarTitle}</div >
-        <div class="print-header-right">${schoolDisplayName}</div>
-`;
+                <div class="print-header-left">${calendarTitle}</div>
+                <div class="print-header-right">${schoolDisplayName}</div>
+            `;
         }
 
         // 4. Apply Classes to Body
@@ -4318,7 +4444,7 @@ const App = {
         const previousClasses = body.className;
 
         body.classList.add('printing-mode');
-        body.classList.add(`print - ${size.toLowerCase()} `);
+        body.classList.add(`print-${size.toLowerCase()}`);
         if (isScale) body.classList.add('print-scale');
 
         // 5. Inject @page Style Dynamically
@@ -4746,7 +4872,7 @@ const App = {
                 }
 
                 if (excelCount > 0) {
-                    statusArea.innerHTML = `< span class="text-green-600 font-bold" > 총 ${excelCount}건의 일정 발견</span > `;
+                    statusArea.innerHTML = `<span class="text-green-600 font-bold">총 ${excelCount}건의 일정 발견</span>`;
                     btnUpload.disabled = false;
                     btnUpload.classList.remove('opacity-50', 'cursor-not-allowed');
                 } else {
@@ -4766,7 +4892,7 @@ const App = {
                     } else {
                         debugMsg += '데이터 행이 비어있습니다.';
                     }
-                    statusArea.innerHTML = `< span class="text-red-500 font-bold" > 발견된 일정이 없습니다.</span > `;
+                    statusArea.innerHTML = `<span class="text-red-500 font-bold">발견된 일정이 없습니다.</span>`;
                     alert(debugMsg);
                 }
             };
@@ -5086,22 +5212,22 @@ const App = {
 
             searchResults.classList.remove('hidden');
             if (matches.length === 0) {
-                searchResults.innerHTML = `< div class="text-gray-400 p-2 text-xs" > 검색 결과가 없습니다.</div > `;
+                searchResults.innerHTML = `<div class="text-gray-400 p-2 text-xs">검색 결과가 없습니다.</div>`;
             } else {
                 searchResults.innerHTML = matches.map(s => {
                     const isRange = s.end_date && s.end_date !== s.start_date;
                     const dateDisplay = isRange ? `${s.start_date} ~${s.end_date} ` : s.start_date;
 
                     let typeTag = '';
-                    if (s.isBasic) typeTag = `< span class="bg-blue-50 text-blue-600 px-1 rounded mr-1" > 학사</span > `;
-                    else if (s.isEnv) typeTag = `< span class="bg-green-50 text-green-600 px-1 rounded mr-1" > 환경</span > `;
+                    if (s.isBasic) typeTag = `<span class="bg-blue-50 text-blue-600 px-1 rounded mr-1">학사</span>`;
+                    else if (s.isEnv) typeTag = `<span class="bg-green-50 text-green-600 px-1 rounded mr-1">환경</span>`;
 
                     return `
-    < div class="cursor-pointer hover:bg-purple-50 p-2 rounded border-b last:border-0" data - date="${s.start_date}" >
+                        <div class="cursor-pointer hover:bg-purple-50 p-2 rounded border-b last:border-0" data-date="${s.start_date}">
                             <div class="font-bold text-gray-700 text-xs truncate">${typeTag}${s.title}</div>
                             <div class="text-[10px] text-gray-500">${dateDisplay}</div>
-                        </div >
-    `;
+                        </div>
+                    `;
                 }).join('');
 
                 searchResults.querySelectorAll('div[data-date]').forEach(el => {
@@ -5504,44 +5630,46 @@ const App = {
 
     // --- Logging System ---
 
-    distributeVerticalSpace: function () {
+    distributeVerticalSpace: function (force = false) {
+        // [PERFORMANCE] Only proceed if window dimensions actually changed OR forced
+        const currentHeight = window.innerHeight;
+        const currentWidth = window.innerWidth;
+        if (!force && this._lastDistribHeight === currentHeight && this._lastDistribWidth === currentWidth) return;
+        this._lastDistribHeight = currentHeight;
+        this._lastDistribWidth = currentWidth;
+
         if (this._distributeTimer) cancelAnimationFrame(this._distributeTimer);
         this._distributeTimer = requestAnimationFrame(() => {
             const calendarEl = document.querySelector('#calendar');
-            if (!calendarEl || !this.state.calendar) return;
+            if (!calendarEl || !this.state.calendar) {
+                console.warn("[distributeVerticalSpace] Calendar element or state missing.");
+                return;
+            }
 
             // Only run on Screen mode
             if (document.body.classList.contains('printing-mode')) return;
 
-            // 1. Reset bottom heights to measure natural height
-            // Only touch visible rows to prevent hidden rows from expanding the scroller
+            // [PERFORMANCE] 1. READ PHASE - Bulk measure everything
+            // -------------------------------------------------------------------
             const visibleRows = Array.from(calendarEl.querySelectorAll('.fc-daygrid-body table tr'))
-                .filter(row => row.offsetParent !== null);
+                .filter(row => row.offsetParent !== null); // Check visibility
+            
+            console.log(`[distributeVerticalSpace] Visible Rows: ${visibleRows.length}`);
 
-            if (visibleRows.length === 0) return;
+            if (visibleRows.length === 0) {
+                 console.warn("[distributeVerticalSpace] No visible rows found. Container might be hidden.");
+                 return;
+            }
 
-            const bottomEls = [];
-            visibleRows.forEach(row => {
-                row.querySelectorAll('.fc-daygrid-day-bottom').forEach(el => {
-                    el.style.height = '0px';
-                    bottomEls.push(el);
-                });
-            });
-
-            // 2. Dynamic Measurement
             const windowHeight = window.innerHeight;
             const mainContent = document.querySelector('#main-content');
             if (!mainContent) return;
 
-            // Target Height: Space available for the calendar within the main container
             const rect = mainContent.getBoundingClientRect();
             const availableTotal = windowHeight - rect.top;
-
-            // Safety Margin (Buffer) to prevent accidental overflow
-            // Reduced to minimize the "gap" at the bottom
             const safetyMargin = 10;
 
-            // Sum up existing non-stretchable heights
+            // Measure overheads
             const toolbar = document.querySelector('.fc-header-toolbar');
             const colHeader = document.querySelector('.fc-col-header');
             const footer = document.querySelector('footer');
@@ -5549,33 +5677,63 @@ const App = {
             const toolH = toolbar ? toolbar.offsetHeight : 0;
             const headH = colHeader ? colHeader.offsetHeight : 0;
             const footH = footer ? footer.offsetHeight : 0;
-
             const overhead = toolH + headH + footH + safetyMargin;
 
+            // Calculate 'Natural' Content Height
+            // Instead of resetting heights to 0 (Write) then measuring (Read) -> Thrashing,
+            // We measure current total height (Read) and subtract current spacer heights (Read).
             let contentH = 0;
+            const bottomEls = [];
+
             visibleRows.forEach(row => {
+                // Current total row height
                 contentH += row.offsetHeight;
+
+                // Find spacers in this row to subtract their current height
+                // We assume all spacers in a row have the same height, so we only need to measure one,
+                // but we need to collect ALL of them to update later.
+                const rowSpacers = row.querySelectorAll('.fc-daygrid-day-bottom');
+                let rowSpacerHeight = 0;
+
+                if (rowSpacers.length > 0) {
+                    // Measure one spacer's current height (offsetHeight includes padding/border, which is what we want to remove from the row total)
+                    // If style.height is '0px', offsetHeight might still be small due to content, but here we strictly want the *added* spacer height.
+                    // Actually, simpler: The spacer is just a div. Its offsetHeight IS the gap.
+                    // If it has content inside (which it shouldn't, strictly speaking, mostly empty or absolute), 
+                    // our previous logic was setting style.height.
+                    
+                    // Safe approach: Trust the computed style height if possible, or offsetHeight.
+                    // Since we control this via style.height, let's try to parse it, or fallback to offsetHeight.
+                    // But offsetHeight is reliable.
+                    rowSpacerHeight = rowSpacers[0].offsetHeight;
+                    
+                    rowSpacers.forEach(el => bottomEls.push(el));
+                }
+                
+                contentH -= rowSpacerHeight;
             });
 
-            // 3. Calculate Distribution
+            // [PERFORMANCE] 2. CALCULATE PHASE
+            // -------------------------------------------------------------------
             const remainder = availableTotal - (overhead + contentH);
-
-            // 4. Distribute space
             const rowCount = visibleRows.length;
             const heightPerWeek = Math.floor(remainder / rowCount);
-
-            // USER REQUEST: Minimum 60px for cell bottom (memo space)
+            
+            // USER REQUEST: Minimum 60px
             const finalGap = Math.max(60, heightPerWeek);
 
+            // [PERFORMANCE] 3. WRITE PHASE - Bulk apply updates
+            // -------------------------------------------------------------------
             bottomEls.forEach(el => {
-                el.style.height = `${finalGap} px`;
+                el.style.height = `${finalGap}px`;
             });
 
-            // Force FullCalendar to sync after we modified internal DOM
-            // REMOVED: updateSize() causes infinite resize loop in some conditions
-            // setTimeout(() => {
-            //     if (this.state.calendar) this.state.calendar.updateSize();
-            // }, 50);
+            // Force FullCalendar update only after DOM settles
+            requestAnimationFrame(() => {
+                if (this.state.calendar) {
+                    this.state.calendar.updateSize();
+                }
+            });
         });
     },
 

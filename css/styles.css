@@ -1236,3 +1236,55 @@ html {
         overflow-y: auto !important;
     }
 }
+/* --- Global Header Button Unification --- */
+#main-header .max-w-7xl {
+    height: 64px !important; /* Standard Header Height */
+}
+
+#auth-status {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important; /* Unified 6px gap */
+}
+
+#header-user-info, #view-actions, #header-auth-btn {
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+}
+
+#btn-admin, #btn-logout, #btn-login, #btn-dept-calendar, #btn-list-calendar {
+    height: 32px !important;
+    padding: 0 12px !important; /* Proper padding for text/icons */
+    font-size: 0.85rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    white-space: nowrap !important;
+    border-radius: 4px !important;
+    background-color: white !important;
+    border: 1px solid #d1d5db !important;
+}
+
+#btn-admin {
+    border-color: #e9d5ff !important; /* purple-200 */
+    color: #7e22ce !important; /* purple-700 */
+    background-color: #faf5ff !important; /* purple-50 */
+}
+
+/* Specific button icons */
+.material-symbols-outlined {
+    font-size: 1.1rem !important;
+}
+
+/* responsive adjustment */
+@media (max-width: 640px) {
+    #main-header .max-w-7xl {
+        height: 52px !important;
+    }
+    #btn-admin, #btn-logout, #btn-login, #btn-dept-calendar, #btn-list-calendar {
+        height: 28px !important;
+        padding: 0 8px !important;
+        font-size: 0.8rem !important;
+    }
+}
