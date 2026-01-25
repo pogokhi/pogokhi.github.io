@@ -6,20 +6,32 @@ const App = {
     // Core State
     state: {
         user: null, // Auth User Object
-        role: null, // 'admin' | 'teacher'
-        status: null, // 'active' | 'pending'
+        role: null, // 'admin' | 'teacher' | 'head' | 'dept'
+        status: null, // 'active' | 'pending' | 'rejected'
         currentYear: new Date().getFullYear(),
-        viewMode: 'calendar', // 'calendar', 'list'
-        listViewStart: null, // Start Date of current list week view
-        departments: [], // Cached Departments
-        templates: {}, // Cached Modal Templates
-        // Cache & Performance
+        viewMode: 'calendar',
+        listViewStart: null,
+        departments: [],
+        templates: {},
         cache: {
             schedules: null,
             departments: null,
-            basicSchedules: {}, // { academicYear: data }
+            basicSchedules: {},
         },
         _lastFetchId: 0,
+        _syncPromise: null,
+        _authInitialized: false,
+    },
+
+    debug: function () {
+        console.table({
+            email: this.state.user?.email,
+            role: this.state.role,
+            status: this.state.status,
+            viewMode: this.state.viewMode,
+            authInitialized: this.state._authInitialized
+        });
+        console.log("Last Auth Trace:", window._lastAuthTrace);
     },
 
     // Constants
@@ -129,7 +141,7 @@ const App = {
 
             // 2.5 Load Initial Settings (for Dynamic Title etc)
             const settings = await this.fetchSettings();
-            
+
             // Check if settings exist (fresh project check)
             if (!settings.academic_year) {
                 alert("학년도를 설정한 후 이용할 수 있습니다. 관리자로 접속하여 학년도를 설정해주세요.");
@@ -149,7 +161,7 @@ const App = {
 
             // 4. Load Initial View
             // Force 'calendar' on root load (ignore localStorage to prevent auto-redirect to dept_list etc for guests)
-            let initialView = 'calendar'; 
+            let initialView = 'calendar';
 
             if (window.location.hash) {
                 const hashView = window.location.hash.substring(1);
@@ -164,7 +176,7 @@ const App = {
             history.replaceState({ view: initialView }, '', window.location.pathname);
             this.navigate(initialView, true); // true = replace (don't push again)
 
-            console.log("GOELink Ready.");
+            console.log("PogokLink Ready.");
         } catch (error) {
             console.error("Initialization Failed:", error);
             alert("시스템 초기화 중 오류가 발생했습니다: " + error.message);
@@ -176,11 +188,11 @@ const App = {
     },
 
     // Helper: Capture Current Date from Active View
-    captureCurrentDate: function() {
+    captureCurrentDate: function () {
         // If we are currently in a view, capture its date to state
         if (this.state.viewMode === 'calendar' && this.state.calendar) {
             return this.state.calendar.getDate();
-        } 
+        }
         if (this.state.viewMode === 'dept_list' && this.state.deptViewDate) {
             return new Date(this.state.deptViewDate);
         }
@@ -230,91 +242,212 @@ const App = {
             const { data, error } = await window.SupabaseClient.supabase.auth.getSession();
             if (error) throw error;
 
-            await this.syncUser(data.session?.user);
-            this.updateAuthUI(data.session);
+            if (data.session) {
+                await this.syncUser(data.session.user);
+                await this.handleGating(data.session, 'checkAuth');
+                this.updateAuthUI(data.session);
+            }
         } catch (e) {
-            console.error("checkAuth: Error getting session", e);
+            console.error("[Auth] checkAuth Error:", e);
         }
 
         // Listen for auth changes
-        window.SupabaseClient.supabase.auth.onAuthStateChange(async (_event, session) => {
-            await this.syncUser(session?.user);
+        window.SupabaseClient.supabase.auth.onAuthStateChange(async (event, session) => {
+            console.log(`[Auth] Event: ${event}`);
+
+            if (session) {
+                await this.syncUser(session.user);
+            } else {
+                await this.syncUser(null);
+            }
+
+            // [SECURITY] Final Gating Login - Await this
+            await this.handleGating(session, 'onAuthStateChange');
+
             this.updateAuthUI(session);
-            // Redirect to calendar if logged in from login page
+
             if (session && this.state.viewMode === 'login') {
                 this.navigate('calendar');
             }
         });
     },
 
-    // Sync User with DB (Upsert & Fetch Role)
+    // Centralized Gating Logic
+    handleGating: async function (session, source = 'unknown') {
+        if (!session) return;
+
+        // Trace log storage for debugging
+        window._lastAuthTrace = {
+            timestamp: new Date().toISOString(),
+            source: source,
+            session: session.user.email,
+            preSyncRole: this.state.role,
+            preSyncStatus: this.state.status,
+            currentView: this.state.viewMode
+        };
+
+        // Wait for sync to finish if it's currently running
+        if (this.state._syncPromise) {
+            await this.state._syncPromise;
+        }
+
+        // Normalize state for comparison
+        const role = String(this.state.role || '').trim().toLowerCase();
+        const status = String(this.state.status || '').trim().toLowerCase();
+
+        // [SAFETY] If role/status are still null, sync definitely failed or is stuck. 
+        if (!this.state.role || !this.state.status) {
+            console.warn(`[Auth Gating] State missing for ${session.user.email}. Giving sync another chance...`);
+            await this.syncUser(session.user);
+        }
+
+        const isAdmin = role === 'admin';
+        const isActive = status === 'active';
+        const canEnter = isAdmin || isActive;
+
+        window._lastAuthTrace.finalRole = role;
+        window._lastAuthTrace.finalStatus = status;
+        window._lastAuthTrace.canEnter = canEnter;
+
+        console.log(`[Auth Check] Source: ${source} | Email: ${session.user.email} | Role: "${role}" | Status: "${status}" | canEnter: ${canEnter}`);
+
+        if (!canEnter) {
+            // If they are on a protected view but aren't authorized -> Go to pending
+            if (this.state.viewMode !== 'pending' && this.state.viewMode !== 'login' && this.state.viewMode !== 'calendar') {
+                console.warn(`[Auth GATING] Unauthorized access to ${this.state.viewMode}. Redirecting to pending.`);
+                this.navigate('pending');
+            }
+        } else {
+            // [SUCCESS] Authorized! 
+            // EMERGENCY REDIRECT: If they are authorized but stuck on the 'pending' page, pull them out.
+            if (this.state.viewMode === 'pending' || this.state.viewMode === 'login') {
+                console.log(`[Auth GATING] Authorized user found on ${this.state.viewMode} page. Redirecting to calendar.`);
+                this.navigate('calendar');
+            }
+            // [SYNC UI] Ensure header reflects the authorized state immediately
+            this.updateAuthUI(session);
+        }
+    },
+
+    // Sync User with DB (Check & Create or Update Meta)
     syncUser: async function (authUser) {
         if (!authUser) {
             this.state.user = null;
             this.state.role = null;
             this.state.status = null;
+            this.state._syncPromise = null;
+            this.state._authInitialized = false;
             return;
         }
 
-        try {
-            // 1. Sync User Info (Upsert)
-            // We lazily create the user_role entry on login if it doesn't exist
-            const { error: upsertError } = await window.SupabaseClient.supabase
-                .from('user_roles')
-                .upsert({
-                    user_id: authUser.id,
-                    email: authUser.email,
-                    last_login: new Date().toISOString()
-                }, { onConflict: 'user_id' });
+        if (this.state._syncPromise) return this.state._syncPromise;
 
-            if (upsertError) {
-                console.warn("User Synced failed (Table might not exist yet?):", upsertError);
+        const self = this;
+        this.state._syncPromise = (async () => {
+            try {
+                // 1. Fetch current role/status
+                const { data, error } = await window.SupabaseClient.supabase
+                    .from('user_roles')
+                    .select('role, status')
+                    .eq('user_id', authUser.id)
+                    .maybeSingle();
+
+                if (error) throw error;
+                if (data) {
+                    // [PRIORITY] Set state IMMEDIATELY after fetch succeeds (Normalized)
+                    self.state.role = String(data.role || '').trim().toLowerCase();
+                    self.state.status = String(data.status || '').trim().toLowerCase();
+
+                    // Update metadata in background
+                    window.SupabaseClient.supabase
+                        .from('user_roles')
+                        .update({ email: authUser.email, last_login: new Date().toISOString() })
+                        .eq('user_id', authUser.id)
+                        .then(({ error }) => { if (error) console.warn("[Auth Sync] Meta update failed:", error); });
+
+                } else {
+                    console.log(`[Auth Sync] User not found in user_roles, creating...`);
+                    const { data: newUser, error: insErr } = await window.SupabaseClient.supabase
+                        .from('user_roles')
+                        .insert({
+                            user_id: authUser.id,
+                            email: authUser.email,
+                            last_login: new Date().toISOString(),
+                            role: 'teacher',
+                            status: 'pending'
+                        })
+                        .select('role, status')
+                        .single();
+
+                    if (insErr) throw insErr;
+                    self.state.role = String(newUser.role || 'teacher').trim().toLowerCase();
+                    self.state.status = String(newUser.status || 'pending').trim().toLowerCase();
+                }
+
+                self.state.user = authUser;
+                self.state._authInitialized = true;
+
+                if (self.state.role === 'dept') {
+                    const prefix = authUser.email.split('@')[0];
+                    if (!self.state.departments || self.state.departments.length === 0) {
+                        self.state.departments = await self.fetchDepartments();
+                    }
+                    const dept = self.state.departments.find(d => d.dept_id_en === prefix);
+                    self.state.myDeptId = dept ? dept.id : null;
+                }
+
+                console.log(`[Auth Sync] Complete: ${authUser.email} | Role: ${self.state.role} | Status: ${self.state.status}`);
+
+            } catch (err) {
+                console.error("[Auth Sync] ❌ Critical Error during syncUser:", {
+                    message: err.message,
+                    code: err.code,
+                    details: err.details,
+                    hint: err.hint,
+                    fullError: err
+                });
+                self.state.user = authUser;
+                self.state.role = self.state.role || 'teacher';
+                self.state.status = self.state.status || 'pending';
+            } finally {
+                self.state._syncPromise = null;
             }
+        })();
 
-            // 2. Fetch Role Info
-            const { data: roleRecords, error: fetchError } = await window.SupabaseClient.supabase
-                .from('user_roles')
-                .select('role, status')
-                .eq('user_id', authUser.id)
-                .limit(1);
-
-            const data = (roleRecords && roleRecords.length > 0) ? roleRecords[0] : null;
-
-            this.state.user = authUser;
-
-            if (data) {
-                this.state.role = data.role;
-                this.state.status = data.status;
-            } else {
-                // Default fallback if fetch failed or just inserted
-                this.state.role = 'teacher';
-                this.state.status = 'pending';
-            }
-
-            console.log(`User: ${authUser.email}, Role: ${this.state.role}, Status: ${this.state.status}`);
-
-        } catch (e) {
-            console.error("Sync Logic Error:", e);
-            // Fallback
-            this.state.user = authUser;
-            this.state.role = 'teacher';
-        }
+        return this.state._syncPromise;
     },
 
     updateAuthUI: function (session) {
-        // State is already updated by syncUser, but we ensure consistency
-        if (!this.state.user && session?.user) this.state.user = session.user;
+        // [PERFORMANCE] If state hasn't changed, skip DOM update
+        const currentUserEmail = this.state.user?.email || null;
+        const currentRole = this.state.role || null;
 
-        const authContainer = document.getElementById('auth-status');
-
-        if (!authContainer) {
-            console.error("updateAuthUI: 'auth-status' element not found!");
+        if (this._lastUiUpdateEmail === currentUserEmail && this._lastUiUpdateRole === currentRole) {
             return;
         }
 
+        // State consistency fallback
+        if (!this.state.user && session?.user) this.state.user = session.user;
+
+        const authContainer = document.getElementById('auth-status');
+        if (!authContainer) return;
+
+        this._lastUiUpdateEmail = currentUserEmail;
+        this._lastUiUpdateRole = currentRole;
+
+        const role = String(this.state.role || '').trim().toLowerCase();
+        const status = String(this.state.status || '').trim().toLowerCase();
+
         if (this.state.user) {
             const userEmail = this.state.user.email.split('@')[0];
-            const adminBtn = this.state.role === 'admin'
+            const isAdmin = role === 'admin';
+
+            // [DIAGNOSTIC] If email is admin but role is not admin, log a loud warning
+            if (userEmail.toLowerCase().includes('admin') && !isAdmin) {
+                console.warn(`[Auth Warning] User "${userEmail}" has an admin-like email but role is "${role}". Admin button will NOT be shown.`);
+            }
+
+            const adminBtn = isAdmin
                 ? `<button id="btn-admin" class="text-sm px-3 py-1 border border-purple-200 text-purple-700 rounded bg-purple-50 hover:bg-purple-100 ml-2">관리자</button>`
                 : '';
 
@@ -324,16 +457,21 @@ const App = {
                 <button id="btn-logout" class="text-sm px-3 py-1 border border-gray-300 rounded hover:bg-gray-100 ml-2">로그아웃</button>
             `;
 
-            document.getElementById('btn-logout').addEventListener('click', async () => {
-                await window.SupabaseClient.supabase.auth.signOut();
-                this.navigate('calendar');
-                window.location.reload(); // Clean state
-            });
+            const logoutBtn = document.getElementById('btn-logout');
+            if (logoutBtn) {
+                logoutBtn.onclick = async () => {
+                    if (!confirm('로그아웃 하시겠습니까?')) return;
+                    await window.SupabaseClient.supabase.auth.signOut();
+                    this.clearCache();
+                    window.location.replace(window.location.pathname + '#calendar');
+                };
+            }
 
-            if (this.state.role === 'admin') {
-                document.getElementById('btn-admin').addEventListener('click', () => {
-                    this.navigate('admin');
-                });
+            if (isAdmin) {
+                const btnAdmin = document.getElementById('btn-admin');
+                if (btnAdmin) {
+                    btnAdmin.onclick = () => this.navigate('admin');
+                }
             }
         } else {
             authContainer.innerHTML = `
@@ -350,12 +488,11 @@ const App = {
 
     updateAccessControls: function () {
         // "Add Schedule" Button Visibility
-        // Visible for: Admin, Head Teacher
-        // Hidden for: Teacher, Guest
         const btnAddSchedule = document.getElementById('btn-add-schedule');
 
         if (btnAddSchedule) {
-            const canAdd = this.state.role === 'admin' || this.state.role === 'head_teacher' || this.state.role === 'head';
+            const isActive = this.state.status === 'active' || this.state.role === 'admin';
+            const canAdd = isActive && (this.state.role === 'admin' || this.state.role === 'head' || this.state.role === 'head_teacher' || this.state.role === 'dept');
 
             if (canAdd) {
                 btnAddSchedule.classList.remove('hidden');
@@ -389,25 +526,73 @@ const App = {
                 console.error("Failed to load calendar", e);
                 container.innerHTML = `<p class="text-red-500">캘린더 로딩 실패</p>`;
             }
-        } else if (viewName === 'list') {
-            try {
-                const response = await fetch('pages/list.html');
-                const html = await response.text();
-                container.innerHTML = html;
-                this.initListView();
-            } catch (e) {
-                console.error("Failed to load list view", e);
-                container.innerHTML = `<p class="text-red-500">목록 로딩 실패</p>`;
+        } else if (viewName === 'list' || viewName === 'dept_list' || viewName === 'admin') {
+            // [STATUS CHECK] Block access to internal views if not (Active OR Admin)
+            const role = String(this.state.role || '').trim().toLowerCase();
+            const status = String(this.state.status || '').trim().toLowerCase();
+            const isAdmin = role === 'admin';
+            const isActive = status === 'active';
+
+            if (this.state.user && !(isAdmin || isActive)) {
+                console.warn(`[View Gating] Unauthorized view requested: ${viewName}. Status: ${status}, Role: ${role}`);
+                this.navigate('pending', true);
+                return;
             }
-        } else if (viewName === 'dept_list') {
+            // Double check for actual session to be safe
+            const { data: { session } } = await window.SupabaseClient.supabase.auth.getSession();
+            if (!session && viewName !== 'calendar') {
+                this.navigate('login');
+                return;
+            }
+
+            if (viewName === 'list') {
+                try {
+                    const response = await fetch('pages/list.html');
+                    const html = await response.text();
+                    container.innerHTML = html;
+                    this.initListView();
+                } catch (e) {
+                    console.error("Failed to load list view", e);
+                    container.innerHTML = `<p class="text-red-500">목록 로딩 실패</p>`;
+                }
+            } else if (viewName === 'dept_list') {
+                try {
+                    const response = await fetch('pages/dept-list.html');
+                    const html = await response.text();
+                    container.innerHTML = html;
+                    this.initDeptListView();
+                } catch (e) {
+                    console.error("Failed to load dept list view", e);
+                    container.innerHTML = `<p class="text-red-500">부서별 보기 로딩 실패</p>`;
+                }
+            } else if (viewName === 'admin') {
+                // Check Admin Auth (Simple client-side check, real security via RLS)
+                const currentRole = String(this.state.role || '').trim().toLowerCase();
+                if (!this.state.user || currentRole !== 'admin') {
+                    alert("접근 권한이 없습니다.");
+                    this.navigate('calendar');
+                    return;
+                }
+
+                try {
+                    const response = await fetch('pages/admin.html');
+                    const html = await response.text();
+                    container.innerHTML = html;
+                    this.initAdminView();
+                } catch (e) {
+                    console.error("Failed to load admin page", e);
+                    container.innerHTML = "<p class='text-red-500'>페이지를 불러올 수 없습니다.</p>";
+                }
+            }
+        } else if (viewName === 'pending') {
             try {
-                const response = await fetch('pages/dept-list.html');
+                const response = await fetch('pages/pending.html');
                 const html = await response.text();
                 container.innerHTML = html;
-                this.initDeptListView();
+                this.initPendingView();
             } catch (e) {
-                console.error("Failed to load dept list view", e);
-                container.innerHTML = `<p class="text-red-500">부서별 보기 로딩 실패</p>`;
+                console.error("Failed to load pending page", e);
+                container.innerHTML = "<p class='text-red-500'>페이지를 로드할 수 없습니다.</p>";
             }
         } else if (viewName === 'login') {
             try {
@@ -417,23 +602,6 @@ const App = {
                 this.initLoginView();
             } catch (e) {
                 console.error("Failed to load login page", e);
-                container.innerHTML = "<p class='text-red-500'>페이지를 불러올 수 없습니다.</p>";
-            }
-        } else if (viewName === 'admin') {
-            // Check Admin Auth (Simple client-side check, real security via RLS)
-            if (!this.state.user || this.state.role !== 'admin') {
-                alert("접근 권한이 없습니다.");
-                this.navigate('calendar'); // Redirect to calendar instead of login if already logged in but not admin
-                return;
-            }
-
-            try {
-                const response = await fetch('pages/admin.html');
-                const html = await response.text();
-                container.innerHTML = html;
-                this.initAdminView();
-            } catch (e) {
-                console.error("Failed to load admin page", e);
                 container.innerHTML = "<p class='text-red-500'>페이지를 불러올 수 없습니다.</p>";
             }
         }
@@ -475,7 +643,10 @@ const App = {
 
                 if (error) throw error;
                 this.clearCache();
-                // Auth State Change listener will handle redirect
+
+                // [STATUS CHECK] We need to ensure we have the status before redirecting
+                // But onAuthStateChange will trigger syncUser.
+                // However, we want to immediately redirect to pending if needed.
             } catch (err) {
                 errorMsg.textContent = '로그인 실패: 이메일 또는 비밀번호를 확인하세요.';
                 errorMsg.classList.remove('hidden');
@@ -483,6 +654,15 @@ const App = {
                 btn.innerHTML = '로그인';
             }
         };
+    },
+
+    initPendingView: function () {
+        const btnReturn = document.getElementById('btn-return-main');
+        if (btnReturn) {
+            btnReturn.onclick = () => {
+                this.navigate('calendar');
+            };
+        }
     },
 
     initAdminView: async function () {
@@ -621,6 +801,8 @@ const App = {
                 row.className = "flex items-center gap-2 mb-2";
                 row.innerHTML = `
                     <input type="text" placeholder="부서명" class="dept-name-input border rounded px-2 py-1 w-48" />
+                    <input type="text" placeholder="약어" class="dept-nickname-input border rounded px-2 py-1 w-16 text-center text-sm" maxlength="3" />
+                    <input type="text" placeholder="ID" class="dept-id-input border rounded px-2 py-1 w-24 text-center text-sm" />
                     <input type="color" value="#3788d8" class="dept-color-input border rounded h-8 w-8 cursor-pointer" />
                     <button class="btn-delete-dept text-red-500 hover:text-red-700">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
@@ -648,7 +830,7 @@ const App = {
                 alert(`${y}학년도를 처음 설정하려고 합니다.\n날짜를 검토 후, '학년도 및 기본 학사 일정 저장', '부서 설정 저장' 버튼을 눌러주세요.`);
             }
 
-            this.populateAdminForm(settings, y);
+            await this.populateAdminForm(settings, y);
 
             // Smart Calc for Year-based dates (Only for NEW years to avoid overwrite)
             const selectedYear = y || (yearSelect ? yearSelect.value : null);
@@ -863,6 +1045,7 @@ const App = {
                     id: d.id, // Store ID for stable update
                     name: d.dept_name,
                     nickname: d.dept_short,
+                    dept_id_en: d.dept_id_en,
                     color: d.dept_color
                 }));
 
@@ -879,6 +1062,7 @@ const App = {
                 let color = d.color || defaultColor;
                 let name = d.name || '';
                 let nickname = d.nickname || '';
+                let deptIdEn = d.dept_id_en || '';
                 if (!nickname && name) {
                     nickname = name.substring(0, 2);
                 }
@@ -886,6 +1070,7 @@ const App = {
                 row.innerHTML = `
                      <input type="text" value="${name}" class="dept-name-input border rounded px-2 py-1 w-48 focus:ring-2 focus:ring-purple-200" placeholder="부서명" />
                      <input type="text" value="${nickname}" class="dept-nickname-input border rounded px-2 py-1 w-16 text-center text-sm focus:ring-2 focus:ring-purple-200" placeholder="약어" maxlength="3" />
+                     <input type="text" value="${deptIdEn}" class="dept-id-input border rounded px-2 py-1 w-24 text-center text-sm focus:ring-2 focus:ring-purple-200" placeholder="ID" />
                      <input type="color" value="${color}" class="dept-color-input border rounded h-8 w-8 cursor-pointer p-0.5 bg-white" />
                      <button class="btn-delete-dept text-gray-400 hover:text-red-500 transition-colors">
                         <span class="material-symbols-outlined text-lg">delete</span>
@@ -944,8 +1129,9 @@ const App = {
                 const defColor = defaultSpecColors[s.id] || '#9ca3af';
                 const color = savedRow ? (savedRow.dept_color || defColor) : defColor;
                 const active = savedRow ? savedRow.is_active : false;
-                let nickname = savedRow ? (savedRow.dept_short || '') : '';
-                if (!nickname) nickname = s.name.substring(0, 2);
+                let deptIdEn = savedRow ? (savedRow.dept_id_en || '') : '';
+                // [FIX] Define nickname variable
+                const nickname = savedRow ? (savedRow.dept_short || '') : (s.short_name || s.name.substring(0, 2));
 
                 const div = document.createElement('div');
                 div.className = "flex items-center gap-2 mb-2 special-dept-row";
@@ -955,12 +1141,14 @@ const App = {
                 div.innerHTML = `
                      <input type="text" value="${s.name}" readonly class="bg-white text-gray-600 border rounded px-2 py-1 w-32 cursor-default focus:ring-0" />
                      <input type="text" value="${nickname}" class="special-dept-nickname border rounded px-2 py-1 w-16 text-center text-sm focus:ring-2 focus:ring-purple-200" placeholder="약어" maxlength="3" />
+                     <input type="text" value="${deptIdEn}" class="special-dept-id-input border rounded px-2 py-1 w-24 text-center text-sm focus:ring-2 focus:ring-purple-200" placeholder="ID" />
                      <input type="color" value="${color}" class="special-dept-color border rounded h-8 w-8 cursor-pointer p-0.5 bg-white" />
                      <label class="flex items-center gap-2 cursor-pointer text-sm select-none">
                          <input type="checkbox" class="special-dept-check rounded text-purple-600 focus:ring-purple-500" ${active ? 'checked' : ''}>
                          <span class="text-gray-600">사용</span>
                      </label>
                  `;
+
                 specList.appendChild(div);
 
                 const specNick = div.querySelector('.special-dept-nickname');
@@ -972,7 +1160,7 @@ const App = {
         }
 
         // --- 4. Basic Schedules (Fetch from new Table) ---
-        const targetY = this.state.currentYear;
+        const targetY = this.state.currentYear || new Date().getFullYear(); // [FIX] Fallback to current year
         const { data: scheduleRows } = await window.SupabaseClient.supabase
             .from('basic_schedules')
             .select('*')
@@ -1085,7 +1273,7 @@ const App = {
         // 2. Identify Variables (In DB but not in Standard)
         const variableRows = schedules.filter(r => r.type === 'holiday');
         const ayStart = `${targetY}-03-01`;
-        const ayEnd = `${parseInt(targetY) + 1}-02-29`;
+        const ayEnd = `${parseInt(targetY) + 1}-02 - 29`;
 
         variableRows.forEach(r => {
             // Range check: Only items belonging to THIS academic year calendar (Mar to Feb)
@@ -1158,13 +1346,13 @@ const App = {
             let displayDate = dateKey;
             if (dateKey.length === 10) {
                 const d = new Date(dateKey);
-                displayDate = `${dateKey}(${dayNames[d.getDay()]})`;
+                displayDate = `${dateKey} (${dayNames[d.getDay()]})`;
             }
 
             const isSubstitute = name.includes('대체');
             div.innerHTML = `
                 <span class="font-medium text-sm ${isSubstitute ? 'text-blue-600' : 'text-gray-700'}">${displayDate}</span>
-                <span class="text-sm ${isSubstitute ? 'text-blue-500 font-medium' : 'text-gray-500'}">${name}</span>
+                    <span class="text-sm ${isSubstitute ? 'text-blue-500 font-medium' : 'text-gray-500'}">${name}</span>
             `;
             container.appendChild(div);
         });
@@ -1243,15 +1431,18 @@ const App = {
 
                 if (needsSub) {
                     let subDate = this.adjustSolarDate(dateStr, 1);
-                    while (true) {
+                    let safety = 0;
+                    while (safety < 30) {
                         const sd = this.parseLocal(subDate);
                         const sNum = sd.getDay();
                         // Next non-weekend and non-existing holiday
+                        // [FIX] Ensure subDate matches keys without spaces if needed, but now spaces are gone
                         if (sNum !== 0 && sNum !== 6 && !results[subDate] && !substitutes[subDate]) {
                             substitutes[subDate] = `대체공휴일(${name})`;
                             break;
                         }
                         subDate = this.adjustSolarDate(subDate, 1);
+                        safety++;
                     }
                 }
             });
@@ -1281,7 +1472,7 @@ const App = {
                 // Remove bg-white, border, shadow when editing as requested
                 div.className = "flex items-center justify-between px-1 mb-1 group transition-all";
                 div.innerHTML = `
-                    <div class="flex items-center gap-2 w-full overflow-hidden">
+                <div class="flex items-center gap-2 w-full overflow-hidden">
                         <input type="date" value="${item.date || ''}" max="2099-12-31"
                             class="holiday-date border rounded-lg px-3 py-2 text-sm w-[150px] focus:ring-2 focus:ring-purple-200 transition-colors" />
                         <input type="text" value="${item.name || ''}" placeholder="명칭" 
@@ -1290,7 +1481,7 @@ const App = {
                             <span class="material-symbols-outlined text-xl">delete</span>
                         </button>
                     </div>
-                `;
+    `;
             } else {
                 // View mode: keep the "box" look to match fixed holidays
                 div.className = "flex items-center justify-between bg-white px-3 h-[40px] rounded border border-gray-100 shadow-sm mb-1 group hover:bg-purple-50 transition-all cursor-pointer";
@@ -1298,21 +1489,23 @@ const App = {
                 let displayDate = item.date;
                 try {
                     const d = new Date(item.date);
-                    if (!isNaN(d.getTime())) displayDate = `${item.date}(${dayNames[d.getDay()]})`;
+                    if (!isNaN(d.getTime())) displayDate = `${item.date} (${dayNames[d.getDay()]})`;
                 } catch (e) { }
 
                 div.innerHTML = `
+                <div class="flex items-center gap-2">
                     <span class="font-medium text-sm text-gray-700">${displayDate}</span>
-                    <div class="flex items-center gap-2">
-                        <span class="text-sm text-gray-500">${item.name}</span>
-                        <button type="button" class="btn-edit-hol opacity-0 group-hover:opacity-100 text-gray-400 hover:text-blue-500 transition-opacity mr-1">
+                    <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button type="button" class="btn-edit-hol text-gray-400 hover:text-blue-500">
                             <span class="material-symbols-outlined text-lg">edit</span>
                         </button>
-                        <button type="button" class="btn-del-hol opacity-0 group-hover:opacity-100 text-red-300 hover:text-red-500 transition-opacity">
+                        <button type="button" class="btn-del-hol text-red-300 hover:text-red-500">
                             <span class="material-symbols-outlined text-lg">delete</span>
                         </button>
                     </div>
-                `;
+                </div>
+                <span class="text-sm text-gray-500">${item.name}</span>
+`;
 
                 div.onclick = (e) => {
                     if (e.target.closest('.btn-del-hol')) return;
@@ -1371,7 +1564,7 @@ const App = {
             if (!dateStr) return '';
             try {
                 const d = new Date(dateStr);
-                if (!isNaN(d.getTime())) return `${dateStr}(${dayNames[d.getDay()]})`;
+                if (!isNaN(d.getTime())) return `${dateStr} (${dayNames[d.getDay()]})`;
             } catch (e) { }
             return dateStr;
         };
@@ -1384,7 +1577,7 @@ const App = {
             if (isEditing) {
                 div.className = "flex items-center gap-1 w-full p-1 mb-1 bg-gray-50";
                 div.innerHTML = `
-                    <div class="flex items-center gap-2 w-full">
+    <div class="flex items-center gap-2 w-full">
                          <div class="flex items-center gap-1">
                             <input type="date" value="${item.start || ''}" max="2099-12-31"
                                 class="event-start border rounded-lg px-3 py-2 text-sm w-[140px] focus:ring-2 focus:ring-blue-200 transition-colors" />
@@ -1400,27 +1593,29 @@ const App = {
                             <span class="material-symbols-outlined text-xl">delete</span>
                         </button>
                     </div>
-                `;
+    `;
             } else {
                 div.className = "flex items-center justify-between bg-white px-3 h-[40px] rounded border border-gray-100 shadow-sm mb-1 group hover:bg-blue-50 transition-all cursor-pointer";
 
                 let dateStr = getDisplayDate(item.start);
                 if (item.end && item.end !== item.start) {
-                    dateStr += ` ~ ${getDisplayDate(item.end)}`;
+                    dateStr += ` ~${getDisplayDate(item.end)} `;
                 }
 
                 div.innerHTML = `
+                <div class="flex items-center gap-2">
                     <span class="font-medium text-sm text-gray-700">${dateStr}</span>
-                    <div class="flex items-center gap-2">
-                        <span class="text-sm text-gray-500">${item.name}</span>
-                        <button type="button" class="btn-edit-major opacity-0 group-hover:opacity-100 text-gray-400 hover:text-blue-500 transition-opacity mr-1">
+                    <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button type="button" class="btn-edit-major text-gray-400 hover:text-blue-500">
                             <span class="material-symbols-outlined text-lg">edit</span>
                         </button>
-                        <button type="button" class="btn-del-major opacity-0 group-hover:opacity-100 text-red-300 hover:text-red-500 transition-opacity">
+                        <button type="button" class="btn-del-major text-red-300 hover:text-red-500">
                             <span class="material-symbols-outlined text-lg">delete</span>
                         </button>
                     </div>
-                `;
+                </div>
+                <span class="text-sm text-gray-500">${item.name}</span>
+`;
 
                 div.onclick = (e) => {
                     if (e.target.closest('.btn-del-major')) return;
@@ -1459,19 +1654,19 @@ const App = {
             const div = document.createElement('div');
             div.className = "flex items-center justify-between bg-white px-3 h-[40px] rounded border border-gray-100 shadow-sm mb-1 hover:bg-green-50 transition-colors";
 
-            const fullDate = `${year}-${dateKey}`;
+            const fullDate = `${year} -${dateKey} `;
             let displayDate = fullDate;
             try {
                 const d = new Date(fullDate);
                 if (!isNaN(d.getTime())) {
-                    displayDate = `${fullDate}(${dayNames[d.getDay()]})`;
+                    displayDate = `${fullDate} (${dayNames[d.getDay()]})`;
                 }
             } catch (e) { }
 
             div.innerHTML = `
-                <span class="font-medium text-sm text-gray-700">${displayDate}</span>
-                <span class="text-sm text-green-600 font-medium">${name}</span>
-            `;
+    <span class="font-medium text-sm text-gray-700">${displayDate}</span>
+        <span class="text-sm text-green-600 font-medium">${name}</span>
+`;
             container.appendChild(div);
         });
     },
@@ -1682,9 +1877,11 @@ const App = {
                 const name = nameInp ? nameInp.value.trim() : '';
                 const nickInp = row.querySelector('.dept-nickname-input');
                 const nickname = nickInp ? nickInp.value.trim() : '';
+                const idInp = row.querySelector('.dept-id-input');
+                const deptIdEn = idInp ? idInp.value.trim() : null;
                 const color = row.querySelector('.dept-color-input').value;
                 if (name) {
-                    generalDepts.push({ id, name, nickname, color });
+                    generalDepts.push({ id, name, nickname, deptIdEn, color });
                 }
             });
 
@@ -1863,6 +2060,7 @@ const App = {
                     academic_year: academicYear,
                     dept_name: d.name,
                     dept_short: d.nickname,
+                    dept_id_en: d.deptIdEn,
                     dept_color: d.color,
                     sort_order: i,
                     is_active: true
@@ -1876,6 +2074,8 @@ const App = {
                 const id = row.dataset.id; // DB UUID or empty
                 const name = row.dataset.name; // e.g. "행정실"
                 const nickname = row.querySelector('.special-dept-nickname').value;
+                const idInp = row.querySelector('.special-dept-id-input');
+                const deptIdEn = idInp ? idInp.value.trim() : null;
                 const color = row.querySelector('.special-dept-color').value;
                 const active = row.querySelector('.special-dept-check').checked;
 
@@ -1883,6 +2083,7 @@ const App = {
                     academic_year: academicYear,
                     dept_name: name,
                     dept_short: nickname,
+                    dept_id_en: deptIdEn,
                     dept_color: color,
                     sort_order: 100 + i,
                     is_active: active
@@ -1955,7 +2156,7 @@ const App = {
             // 1. Find Orphaned Schedules (dept_id IS NULL AND dept_name IS NOT NULL)
             const { data: orphans, error } = await window.SupabaseClient.supabase
                 .from('schedules')
-                .select('id, dept_name, start_date')
+                .select('id, dept_name, start_date, end_date, title, academic_year, weekend, is_printable, description, visibility, author_id')
                 .is('dept_id', null)
                 .neq('dept_name', null)
                 .neq('dept_name', ''); // Ensure valid name
@@ -1963,7 +2164,7 @@ const App = {
             if (error) throw error;
             if (!orphans || orphans.length === 0) return;
 
-            console.log(`Found ${orphans.length} orphaned schedules. Attempting repair...`);
+            console.log(`Found ${orphans.length} orphaned schedules.Attempting repair...`);
 
             // 2. Group Orphans by Calculated Academic Year to minimize Dept queries
             // Map: { "2025": [schedule, schedule...], "2026": [...] }
@@ -2011,7 +2212,16 @@ const App = {
                         // Restore ID
                         updates.push({
                             id: sch.id,
-                            dept_id: foundId
+                            dept_id: foundId,
+                            title: sch.title, // [FIX] Include required fields for upsert
+                            start_date: sch.start_date || sch.start_date, // Should be present
+                            end_date: sch.end_date || sch.start_date,
+                            academic_year: sch.academic_year || ay,
+                            weekend: sch.weekend,
+                            is_printable: sch.is_printable !== false, // careful with default
+                            description: sch.description,
+                            visibility: sch.visibility || 'internal',
+                            author_id: sch.author_id
                         });
                     }
                 });
@@ -2022,7 +2232,7 @@ const App = {
                         .from('schedules')
                         .upsert(updates);
 
-                    if (updErr) console.error(`Repair failed for year ${ay}:`, updErr);
+                    if (updErr) console.error(`Repair failed for year ${ay}: `, updErr);
                     else console.log(`Repaired ${updates.length} schedules for year ${ay}`);
                 }
             }
@@ -2043,7 +2253,7 @@ const App = {
         }
 
         const display = `${baseName}Link`;
-        
+
         // 1. Update Browser Tab Title
         document.title = display;
 
@@ -2061,7 +2271,7 @@ const App = {
 
             if (!textNodeFound) {
                 const versionSpan = titleEl.querySelector('span')?.outerHTML || '<span class="text-xs font-normal text-gray-500 ml-1">v2.0</span>';
-                titleEl.innerHTML = `${newTitle}${versionSpan}`;
+                titleEl.innerHTML = `${newTitle}${versionSpan} `;
             }
         }
     },
@@ -2085,14 +2295,15 @@ const App = {
 
             if (users && users.length > 0) {
                 listContainer.innerHTML = users.map(u => `
-                    <div class="flex items-center justify-between p-2 border rounded hover:bg-gray-50">
+                <div class="flex items-center justify-between p-2 border rounded hover:bg-gray-50">
                         <div>
                             <div class="font-bold text-sm text-gray-800">${u.email.split('@')[0]}</div>
                             <div class="text-xs text-gray-500">최근 접속: ${new Date(u.last_login).toLocaleDateString()}</div>
                         </div>
                         <div class="flex items-center gap-2">
-                            <select onchange="window.App.updateUserRole('${u.user_id}', this.value)" class="text-xs border rounded p-1 ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : (u.role === 'head' ? 'bg-blue-100 text-blue-700' : 'bg-white')}">
+                            <select onchange="window.App.updateUserRole('${u.user_id}', this.value)" class="text-xs border rounded p-1 ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : (u.role === 'head' ? 'bg-blue-100 text-blue-700' : (u.role === 'dept' ? 'bg-indigo-100 text-indigo-700' : 'bg-white'))}">
                                 <option value="teacher" ${u.role === "teacher" ? "selected" : ""}>일반 (Teacher)</option>
+                                <option value="dept" ${u.role === "dept" ? "selected" : ""}>부서 (Dept)</option>
                                 <option value="head" ${u.role === "head" ? "selected" : ""}>부장 (Head)</option>
                                 <option value="admin" ${u.role === "admin" ? "selected" : ""}>관리자 (Admin)</option>
                             </select>
@@ -2103,7 +2314,7 @@ const App = {
                             </select>
                         </div>
                     </div>
-                `).join('');
+    `).join('');
             } else {
                 listContainer.innerHTML = "<p class='text-gray-400 text-center py-4'>사용자가 없습니다.</p>";
             }
@@ -2133,12 +2344,25 @@ const App = {
     },
 
     updateUserStatus: async function (userId, newStatus) {
+        const statusMap = { 'active': '승인', 'pending': '대기', 'rejected': '거부' };
+        const statusName = statusMap[newStatus] || newStatus;
+
+        if (!confirm(`사용자 상태를 '${statusName}'(으)로 변경하시겠습니까?`)) {
+            this.loadAdminUsers(); // Revert UI
+            return;
+        }
+
         const { error } = await window.SupabaseClient.supabase
             .from('user_roles')
             .update({ status: newStatus })
             .eq('user_id', userId);
 
-        this.logAction('UPDATE_STATUS', 'user_roles', userId, { newStatus });
+        if (error) {
+            alert("업데이트 실패: " + error.message);
+        } else {
+            this.loadAdminUsers(); // Refresh to reflect change
+            this.logAction('UPDATE_STATUS', 'user_roles', userId, { newStatus });
+        }
     },
 
     loadAuditLogs: async function () {
@@ -2162,7 +2386,7 @@ const App = {
                             </div>
                             <div class="text-gray-600 truncate">${log.details ? JSON.stringify(JSON.parse(log.details)) : '-'}</div>
                         </div>
-                    `).join('');
+    `).join('');
                 } else {
                     auditList.innerHTML = "<p class='text-gray-400 text-center py-4'>기록된 로그가 없습니다.</p>";
                 }
@@ -2175,7 +2399,7 @@ const App = {
     initCalendar: async function () {
         const calendarEl = document.getElementById('calendar');
         if (!calendarEl) return;
-        
+
         // 1. Initialize State Container
         this.state.calendarData = {
             holidayMap: {},
@@ -2197,14 +2421,14 @@ const App = {
                 list: '목록'
             },
             customButtons: {
-                 // We don't use FC list view, so we override the button behavior or use custom Toolbar
-                 // But simply, we can use the 'listWeek' button to trigger our view if we want, 
-                 // OR we just add a custom button.
-                 // Actually, FC header toolbar buttons for views switch FC views.
-                 // To switch to OUR 'list' view, we should probably add a custom button or 
-                 // rely on the top-level navigation if we had one.
-                 // Current UI has 'extendedMonth,listWeek' in right header.
-                 // Let's hijack 'listWeek' button click? No, FC handles it.
+                // We don't use FC list view, so we override the button behavior or use custom Toolbar
+                // But simply, we can use the 'listWeek' button to trigger our view if we want, 
+                // OR we just add a custom button.
+                // Actually, FC header toolbar buttons for views switch FC views.
+                // To switch to OUR 'list' view, we should probably add a custom button or 
+                // rely on the top-level navigation if we had one.
+                // Current UI has 'extendedMonth,listWeek' in right header.
+                // Let's hijack 'listWeek' button click? No, FC handles it.
                 customPrev: {
                     icon: 'chevron-left',
                     click: () => {
@@ -2232,12 +2456,12 @@ const App = {
                     click: () => {
                         this.navigate('list');
                     }
-                 }
+                }
             },
             headerToolbar: {
                 left: 'customPrev,customNext today',
                 center: '', // REMOVED 'title' to prevent FullCalendar from managing it
-                right: 'extendedMonth,customDept,customList' 
+                right: 'extendedMonth,customDept,customList'
             },
             height: '100%', // Fill container for interior scroll on screen
             expandRows: true, // Stretch rows to fill available space (memo space)
@@ -2302,18 +2526,25 @@ const App = {
 
                     // Manual Title Management: Use middle date of range to identify the current month
                     const middleDate = new Date((info.start.getTime() + info.end.getTime()) / 2);
-                    const expectedTitle = `${middleDate.getFullYear()}년 ${middleDate.getMonth() + 1}월`;
+                    const expectedTitle = `${middleDate.getFullYear()}년 ${middleDate.getMonth() + 1} 월`;
                     this._expectedTitle = expectedTitle; // Update cached expectation for other logic if needed
-                    
+
                     const toolbarEl = document.querySelector('.fc-header-toolbar');
                     if (toolbarEl) {
                         const chunks = toolbarEl.querySelectorAll('.fc-toolbar-chunk');
                         const centerChunk = chunks[1]; // Middle chunk
                         if (centerChunk) {
                             let customTitle = centerChunk.querySelector('#custom-calendar-title');
+                            // [FIX] Ensure we create the element correctly if missing
                             if (!customTitle) {
-                                centerChunk.innerHTML = `<h2 class="fc-toolbar-title" id="custom-calendar-title" style="margin:0;"></h2>`;
-                                customTitle = centerChunk.querySelector('#custom-calendar-title');
+                                // Clear chunk first to avoid appending to existing text-nodes
+                                centerChunk.innerHTML = '';
+                                const h2 = document.createElement('h2');
+                                h2.className = 'fc-toolbar-title';
+                                h2.id = 'custom-calendar-title';
+                                h2.style.margin = '0';
+                                centerChunk.appendChild(h2);
+                                customTitle = h2;
                             }
                             if (customTitle && customTitle.textContent !== expectedTitle) {
                                 customTitle.textContent = expectedTitle;
@@ -2371,6 +2602,11 @@ const App = {
             // Custom Content (Delegated to renderCalendarCell)
             dayCellContent: (arg) => {
                 return this.renderCalendarCell(arg);
+            },
+
+            // [FIX] Render HTML in Event Titles (for coloring/styling)
+            eventContent: (arg) => {
+                return { html: arg.event.title }; // Trust the HTML in title
             },
 
             dayCellDidMount: (arg) => {
@@ -2472,7 +2708,7 @@ const App = {
         const day = d.getDay();
         const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday
         const monday = new Date(d.setDate(diff));
-        
+
         if (!this.state.listViewStart) {
             this.state.listViewStart = monday;
         }
@@ -2531,7 +2767,7 @@ const App = {
         // --- Dropdown Navigation ---
         const selYear = document.getElementById('list-nav-year');
         const selMonth = document.getElementById('list-nav-month');
-        
+
         if (selYear && selMonth) {
             // Populate Year (Current +/- 2)
             const currYear = new Date().getFullYear();
@@ -2539,7 +2775,7 @@ const App = {
             for (let y = currYear - 2; y <= currYear + 2; y++) {
                 const opt = document.createElement('option');
                 opt.value = y;
-                opt.textContent = `${y}년`;
+                opt.textContent = `${y} 년`;
                 selYear.appendChild(opt);
             }
 
@@ -2548,7 +2784,7 @@ const App = {
             for (let m = 1; m <= 12; m++) {
                 const opt = document.createElement('option');
                 opt.value = m;
-                opt.textContent = `${m}월`;
+                opt.textContent = `${m} 월`;
                 selMonth.appendChild(opt);
             }
 
@@ -2561,7 +2797,7 @@ const App = {
                 const day = d.getDay();
                 const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday
                 this.state.listViewStart = new Date(d.setDate(diff));
-                
+
                 // Reset month to Jan
                 selMonth.value = 1;
                 this.renderListView();
@@ -2587,12 +2823,12 @@ const App = {
         const updateToggleUI = () => {
             const is2Weeks = this.state.listViewWeeks === 2;
             if (btn1Week) {
-                btn1Week.className = is2Weeks 
-                    ? "px-2 py-0.5 text-xs font-medium rounded text-gray-500 hover:text-gray-900" 
+                btn1Week.className = is2Weeks
+                    ? "px-2 py-0.5 text-xs font-medium rounded text-gray-500 hover:text-gray-900"
                     : "px-2 py-0.5 text-xs font-medium rounded bg-white shadow text-gray-800";
             }
             if (btn2Weeks) {
-                btn2Weeks.className = is2Weeks 
+                btn2Weeks.className = is2Weeks
                     ? "px-2 py-0.5 text-xs font-medium rounded bg-white shadow text-gray-800"
                     : "px-2 py-0.5 text-xs font-medium rounded text-gray-500 hover:text-gray-900";
             }
@@ -2636,11 +2872,11 @@ const App = {
         end.setDate(end.getDate() + (weeks * 7) - 1); // Sunday of last week
 
         // Update Range Display
-        const fmt = (d) => `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
+        const fmt = (d) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')} `;
         // [MOVED UP & FIXED] Sync Dropdowns with Hysteresis
         const selYear = document.getElementById('list-nav-year');
         const selMonth = document.getElementById('list-nav-month');
-        
+
         let currentViewYear = start.getFullYear();
         let currentViewMonth = start.getMonth() + 1; // 1-indexed
 
@@ -2649,12 +2885,12 @@ const App = {
             // This enables viewing either 'Feb' (Old Year) or 'Mar' (New Year) for boundary weeks (e.g., Feb 24 - Mar 2).
             const currSelY = parseInt(selYear.value);
             const currSelM = parseInt(selMonth.value);
-            
+
             let isSelectionValid = false;
             // Iterate through visible days (max 14 days)
             const checkEnd = new Date(end);
             let dIter = new Date(start);
-            while(dIter <= checkEnd) {
+            while (dIter <= checkEnd) {
                 if (dIter.getFullYear() === currSelY && (dIter.getMonth() + 1) === currSelM) {
                     isSelectionValid = true;
                     break;
@@ -2669,20 +2905,20 @@ const App = {
             } else {
                 // Priority 2: Auto-switch to Representative Day (Thursday)
                 const targetDate = new Date(start);
-                targetDate.setDate(targetDate.getDate() + 3); 
+                targetDate.setDate(targetDate.getDate() + 3);
                 currentViewYear = targetDate.getFullYear();
                 currentViewMonth = targetDate.getMonth() + 1;
             }
 
             // Sync UI
-            if (selYear.querySelector(`option[value="${currentViewYear}"]`)) selYear.value = currentViewYear;
+            if (selYear.querySelector(`option[value = "${currentViewYear}"]`)) selYear.value = currentViewYear;
             else selYear.value = currentViewYear;
             selMonth.value = currentViewMonth;
         }
 
         // [FIX] Determine Academic Year based on SYNCED DROPDOWN VALUE
         const targetAcademicYear = (currentViewMonth < 3) ? (currentViewYear - 1) : currentViewYear;
-        const settings = await this.fetchSettings(targetAcademicYear); 
+        const settings = await this.fetchSettings(targetAcademicYear);
         const basicSchedules = settings.basic_schedules || [];
         const sName = settings.full_name_kr || settings.school_name || "학교명 미설정";
 
@@ -2691,7 +2927,7 @@ const App = {
             const hInfos = [];
             const rStartStr = rStart.toISOString().split('T')[0];
             const rEndStr = rEnd.toISOString().split('T')[0];
-            
+
             basicSchedules.forEach(b => {
                 if (b.weekend === null) return; // Skip if weekend column is explicit NULL (User Request)
                 const isHoliday = b.is_holiday || b.type === 'holiday' || b.name.includes('재량휴업') || b.name.includes('대체공휴일');
@@ -2699,53 +2935,53 @@ const App = {
                     const bStart = b.start_date;
                     const bEnd = b.end_date || b.start_date;
                     if (bStart <= rEndStr && (bEnd || bStart) >= rStartStr) {
-                         const hDate = new Date(bStart);
-                         hInfos.push(`${hDate.getMonth() + 1}.${hDate.getDate()}: ${b.name}`);
+                        const hDate = new Date(bStart);
+                        hInfos.push(`${hDate.getMonth() + 1}.${hDate.getDate()}: ${b.name} `);
                     }
                 }
             });
-            return hInfos.length > 0 ? ` <span style="color:red; font-size:11px; font-weight:normal;">(${hInfos.join(', ')})</span>` : '';
+            return hInfos.length > 0 ? ` < span style = "color:red; font-size:11px; font-weight:normal;" > (${hInfos.join(', ')})</span > ` : '';
         };
 
         // Helper: Generate Page Header (Print & Screen)
         const generateHeaderHtml = (rStart, rEnd, isScreenOnly = false, isPrintOnly = false) => {
-            const rangeBase = `${fmt(rStart)} ~ ${fmt(rEnd)}`;
+            const rangeBase = `${fmt(rStart)} ~${fmt(rEnd)} `;
             const holidays = getHolidayString(rStart, rEnd);
             // rangeFull removed, we separate them now
-            
+
             let html = '';
             // Print Header
             if (!isScreenOnly) {
                 html += `
-                    <div class="text-center mb-4 hidden print:block">
+    < div class="text-center mb-4 hidden print:block" >
                         <h1 class="text-3xl font-bold border-b-2 border-black pb-4 mb-2">주간 계획서</h1>
                         <div class="flex justify-between items-end">
                             <div class="text-[16px] font-bold">${rangeBase}</div>
                             <div class="text-[16px] font-bold">${sName}</div>
                         </div>
                         <div class="text-left mt-1 text-[11px] font-bold">${holidays}</div>
-                    </div>
-                `;
+                    </div >
+    `;
             }
             // Screen Header
             if (!isPrintOnly) {
                 html += `
-                    <div class="text-center mb-8 print:hidden">
+    < div class="text-center mb-8 print:hidden" >
                         <h1 class="text-3xl font-bold border-b-2 border-gray-800 pb-4 mb-2">주간 계획서</h1>
                         <div class="flex justify-between items-end">
                             <div class="text-[16px] font-bold text-gray-700">${rangeBase}</div>
                             <div class="text-[16px] font-bold text-gray-700">${sName}</div>
                         </div>
                         <div class="text-left mt-1 text-[11px] font-bold">${holidays}</div>
-                    </div>
-                `;
+                    </div >
+    `;
             }
             return html;
         };
 
         // Update Toolbar Range
         if (rangeDisplay) {
-            rangeDisplay.innerHTML = `${fmt(start)} ~ ${fmt(end)}`; // Removed holiday text
+            rangeDisplay.innerHTML = `${fmt(start)} ~${fmt(end)} `; // Removed holiday text
         }
 
 
@@ -2758,12 +2994,12 @@ const App = {
         const dates = [];
         let curr = new Date(start);
         const totalDays = weeks * 7;
-        for(let i=0; i<totalDays; i++) {
+        for (let i = 0; i < totalDays; i++) {
             dates.push(new Date(curr));
             curr.setDate(curr.getDate() + 1);
         }
 
-        const dayHtmls = []; 
+        const dayHtmls = [];
         const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
 
         const checkOverlap = (evStart, evEnd, targetDateStr) => {
@@ -2775,7 +3011,7 @@ const App = {
         for (const dateObj of dates) {
             const dateStr = this.formatLocal(dateObj);
             const dayName = dayNames[dateObj.getDay()];
-            
+
             const isDayOff = !this.isSchoolDay(dateObj, basicSchedules);
 
             const dailySchedules = schedules.filter(s => {
@@ -2783,7 +3019,7 @@ const App = {
                 let sEnd = s.end_date || s.start_date;
                 if (sStart.includes('T')) sStart = sStart.split('T')[0];
                 if (sEnd.includes('T')) sEnd = sEnd.split('T')[0];
-                
+
                 const overlaps = checkOverlap(sStart, sEnd, dateStr);
                 if (!overlaps) return false;
 
@@ -2799,7 +3035,7 @@ const App = {
 
             const dailyBasics = [];
             basicSchedules.forEach(b => {
-                if (b.type === 'term' || b.type === 'vacation') return; 
+                if (b.type === 'term' || b.type === 'vacation') return;
                 const bStart = b.start_date;
                 const bEnd = b.end_date || b.start_date;
                 if (checkOverlap(bStart, bEnd, dateStr)) {
@@ -2818,19 +3054,19 @@ const App = {
                 let targetDept = departments.find(d => d.dept_name.includes('교무'));
                 const deptName = targetDept ? targetDept.dept_name : '학교 행사';
                 if (!groups[deptName]) groups[deptName] = [];
-                
+
                 // [FIX] Deduplication for Exam Blocks (prevent 4 lines for same exam)
                 const addedTitles = new Set();
-                
+
                 dailyBasics.forEach(b => {
-                   let title = b.name || b.title;
-                   if (b.type === 'exam') title = `[고사] ${b.name}`; // [FIX] Use b.name instead of b.title
-                   if (b.is_holiday || b.type === 'holiday') title = `[공휴일] ${b.name}`;
-                   
-                   if (!addedTitles.has(title)) {
-                       groups[deptName].push({ title: title, desc: '' });
-                       addedTitles.add(title);
-                   }
+                    let title = b.name || b.title;
+                    if (b.type === 'exam') title = `[고사] ${b.name} `; // [FIX] Use b.name instead of b.title
+                    if (b.is_holiday || b.type === 'holiday') title = `[공휴일] ${b.name} `;
+
+                    if (!addedTitles.has(title)) {
+                        groups[deptName].push({ title: title, desc: '' });
+                        addedTitles.add(title);
+                    }
                 });
             }
 
@@ -2840,11 +3076,11 @@ const App = {
             let dayHtml = '';
             if (hasEvents) {
                 const yearStr = dateObj.getFullYear();
-                const monthStr = String(dateObj.getMonth() + 1).padStart(2,'0');
-                const dateNumStr = String(dateObj.getDate()).padStart(2,'0');
-                
+                const monthStr = String(dateObj.getMonth() + 1).padStart(2, '0');
+                const dateNumStr = String(dateObj.getDate()).padStart(2, '0');
+
                 dayHtml += `
-                    <div class="list-day-block break-inside-avoid">
+    < div class="list-day-block break-inside-avoid" >
                         <div class="border-t-[3px] border-black bg-white pt-1 px-1 mb-2">
                             <span class="text-[12px] leading-[1.3] font-bold ${isRedDay ? 'text-red-600' : 'text-gray-900'}">
                                 ${yearStr}년 ${monthStr}월 ${dateNumStr}일 (${dayName}요일)
@@ -2870,9 +3106,9 @@ const App = {
                     groups[deptName].forEach(ev => {
                         dayHtml += `<li><span class="font-medium text-gray-900">${ev.title}</span>${ev.desc ? ` <span class="text-gray-500 text-[11px]">(${ev.desc})</span>` : ''}</li>`;
                     });
-                    dayHtml += `</ul></div>`;
+                    dayHtml += `</ul></div > `;
                 });
-                dayHtml += `</div></div>`;
+                dayHtml += `</div ></div > `;
             }
             dayHtmls.push(dayHtml);
         }
@@ -2882,21 +3118,21 @@ const App = {
         if (weeks === 1) {
             finalHtml = `
                 ${generateHeaderHtml(start, end)}
-                <div class="list-1week-print-cols">
-                    ${dayHtmls.join('')}
-                </div>
-            `;
+<div class="list-1week-print-cols">
+    ${dayHtmls.join('')}
+</div>
+`;
         } else {
             const w1Start = new Date(start);
             const w1End = new Date(start); w1End.setDate(w1End.getDate() + 6);
             const w2Start = new Date(start); w2Start.setDate(w2Start.getDate() + 7);
             const w2End = new Date(start); w2End.setDate(w2End.getDate() + 13);
-            
+
             const week1Html = dayHtmls.slice(0, 7).join('');
             const week2Html = dayHtmls.slice(7, 14).join('');
 
             finalHtml = `
-                <!-- Screen Version -->
+    < !--Screen Version-- >
                 <div class="print:hidden">
                     ${generateHeaderHtml(start, end)}
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
@@ -2905,18 +3141,18 @@ const App = {
                     </div>
                 </div>
 
-                <!-- Print Version -->
-                <div class="hidden print:block">
-                    <div>
-                        ${generateHeaderHtml(w1Start, w1End, false, true)}
-                        <div class="list-1week-print-cols">${week1Html}</div>
-                    </div>
-                    <div style="break-before: page;">
-                        ${generateHeaderHtml(w2Start, w2End, false, true)}
-                        <div class="list-1week-print-cols">${week2Html}</div>
-                    </div>
-                </div>
-            `;
+                <!--Print Version-- >
+    <div class="hidden print:block">
+        <div>
+            ${generateHeaderHtml(w1Start, w1End, false, true)}
+            <div class="list-1week-print-cols">${week1Html}</div>
+        </div>
+        <div style="break-before: page;">
+            ${generateHeaderHtml(w2Start, w2End, false, true)}
+            <div class="list-1week-print-cols">${week2Html}</div>
+        </div>
+    </div>
+`;
         }
 
         container.innerHTML = finalHtml;
@@ -2970,14 +3206,14 @@ const App = {
             for (let y = currYear - 2; y <= currYear + 2; y++) {
                 const opt = document.createElement('option');
                 opt.value = y;
-                opt.textContent = `${y}년`;
+                opt.textContent = `${y} 년`;
                 selYear.appendChild(opt);
             }
             selMonth.innerHTML = '';
             for (let m = 1; m <= 12; m++) {
                 const opt = document.createElement('option');
                 opt.value = m;
-                opt.textContent = `${m}월`;
+                opt.textContent = `${m} 월`;
                 selMonth.appendChild(opt);
             }
             selYear.onchange = () => {
@@ -3008,11 +3244,11 @@ const App = {
         if (selMonth) selMonth.value = month + 1;
 
         const activeDepts = (this.state.departments || []).filter(d => d.is_active);
-        
+
         // Determine Range
         const startOfMonth = new Date(year, month, 1);
         const endOfMonth = new Date(year, month + 1, 0);
-        
+
         const finalStart = customStart ? new Date(customStart) : startOfMonth;
         const finalEnd = customEnd ? new Date(customEnd) : endOfMonth;
 
@@ -3021,25 +3257,25 @@ const App = {
         const printSchool = document.getElementById('dept-print-school');
 
         if (printRange) {
-            printRange.textContent = `${this.formatLocal(finalStart)} ~ ${this.formatLocal(finalEnd)}`;
+            printRange.textContent = `${this.formatLocal(finalStart)} ~${this.formatLocal(finalEnd)} `;
         }
         if (printSchool) {
             const s = this.state.currentSettings;
             printSchool.textContent = s ? (s.full_name_kr || s.school_name || "") : "";
         }
-        
+
         // 1. Header
-        let headerHtml = `<tr><th class="col-date" style="padding: 0 4px; vertical-align: middle; box-shadow: inset 0 -5px 0 #6b7280; height: 50px;">날짜</th>`;
+        let headerHtml = `< tr > <th class="col-date" style="padding: 0 4px; vertical-align: middle; box-shadow: inset 0 -5px 0 #6b7280; height: 50px;">날짜</th>`;
         activeDepts.forEach(d => {
             const color = d.dept_color || '#ccc';
             const shortName = d.dept_short || d.dept_name.substring(0, 2);
             headerHtml += `
-                <th class="col-dept" style="padding: 0 4px; vertical-align: middle; box-shadow: inset 0 -5px 0 ${color}; height: 50px;">
+    < th class="col-dept" style = "padding: 0 4px; vertical-align: middle; box-shadow: inset 0 -5px 0 ${color}; height: 50px;" >
                     <div class="print:hidden">${d.dept_name}</div>
                     <div class="hidden print:block">${shortName}</div>
-                </th>`;
+                </th > `;
         });
-        headerHtml += `</tr>`;
+        headerHtml += `</tr > `;
         thead.innerHTML = headerHtml;
 
         // 2. Data
@@ -3065,7 +3301,7 @@ const App = {
 
         let bodyHtml = '';
         const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
-        
+
         // Loop from finalStart to finalEnd
         let curr = new Date(finalStart);
         while (curr <= finalEnd) {
@@ -3073,24 +3309,32 @@ const App = {
             const dateStr = this.formatLocal(curr);
             const dayNum = curr.getDay();
             const holidayName = holidays[dateStr];
-            
+
             let rowClass = '';
             if (dayNum === 0) rowClass = 'row-sunday';
             else if (dayNum === 1) rowClass = 'row-monday'; // Assign Monday class
             else if (dayNum === 6) rowClass = 'row-saturday';
-            
+
             // Append holiday class instead of overwriting, using space separator
             if (holidayName) {
-                rowClass = rowClass ? `${rowClass} row-holiday` : 'row-holiday';
+                rowClass = rowClass ? `${rowClass} row - holiday` : 'row-holiday';
             }
 
-            bodyHtml += `<tr class="${rowClass}">`;
-            bodyHtml += `<td class="col-date">${d}<br class="print:hidden"><span class="text-[10px] print:text-inherit">(${dayNames[dayNum]})</span></td>`;
+            bodyHtml += `< tr class="${rowClass}" > `;
+            bodyHtml += `< td class="col-date" > ${d} <br class="print:hidden"><span class="text-[10px] print:text-inherit">(${dayNames[dayNum]})</span></td>`;
             activeDepts.forEach(dept => {
                 // 1. Get DB Schedules (Clone to allow injection)
                 // [FIX] 2-Step Matching: ID-based OR Name-based fallback for orphaned data
                 let deptSchedules = (schedules || []).filter(s => {
                     if (s.start_date !== dateStr) return false;
+
+                    // [STRICT DEPT PRIVACY]
+                    if (s.visibility === 'dept') {
+                        const isAdmin = this.state.role === 'admin';
+                        const isMyDept = (this.state.role === 'dept' && this.state.myDeptId && String(this.state.myDeptId) === String(s.dept_id));
+                        if (!isAdmin && !isMyDept) return false;
+                    }
+
                     if (s.dept_id) return String(s.dept_id) == String(dept.id);
                     // Fallback: match by name if ID is missing
                     return s.dept_name === dept.dept_name || s.dept_name === dept.dept_short;
@@ -3111,25 +3355,57 @@ const App = {
                 if (dept.dept_short === '과학') {
                     const mm = String(curr.getMonth() + 1).padStart(2, '0');
                     const dd = String(curr.getDate()).padStart(2, '0');
-                    const envKey = `${mm}-${dd}`;
+                    const envKey = `${mm} -${dd} `;
                     const envEvent = this.FIXED_ENV_EVENTS[envKey];
-                    
+
                     if (envEvent) {
-                         if (!deptSchedules.some(s => s.title === envEvent)) {
+                        if (!deptSchedules.some(s => s.title === envEvent)) {
                             deptSchedules.push({ title: envEvent, description: '' });
                         }
                     }
                 }
 
-                bodyHtml += `<td class="col-dept">`;
+                // 3. Dept Role Filter
+                // If I am a 'dept' user, I only see:
+                // a. My own department's events
+                // b. Virtual events (Holidays/Env) - derived above
+                // c. Basic Schedules (handled separately usually? No, Basic are separate in DB, but here we only render `schedules` table + virtuals)
+
+                // Wait, `schedules` variable comes from DB query.
+                // In Step 2, query was filtered by Guest.
+                // For Dept Role, we should fetch ALL (to see structure? No, structure is static columns).
+                // Actually, the user wants "Other columns are empty".
+                // So we just skip adding `deptSchedules` to HTML if it's not my dept.
+
+                const isDeptUser = this.state.role === 'dept';
+                const isMyDept = isDeptUser ? (String(dept.id) === String(this.state.myDeptId)) : true; // Admin/Teacher sees all
+
+                // IMPORTANT: Virtual events (Kyomu Holidays, Science Env) should probably be visible to everyone?
+                // The user said "Basic School Schedule, Holidays/Events" should be visible.
+                // Virtual events are conceptually "School Events" managed by those departments.
+                // Let's allow Virtual Events always.
+                // But for DB schedules:
+                // If isDeptUser AND !isMyDept -> Filter OUT DB schedules.
+
+                // Filter DB schedules
+                if (isDeptUser && !isMyDept) {
+                    // Start with empty, only keep virtuals if any were added above?
+                    // Above logic added virtuals to `deptSchedules`.
+                    // We need to differentiate DB vs Virtual.
+                    // Virtuals don't have IDs usually (or we can flag them).
+                    // In previous step: `deptSchedules.push({ title: holidayName ... })` -> No ID.
+                    deptSchedules = deptSchedules.filter(s => !s.id); // Keep only virtuals (no ID)
+                }
+
+                bodyHtml += `< td class="col-dept" > `;
                 deptSchedules.forEach(s => {
                     const desc = s.description ? ` (${s.description})` : '';
-                    bodyHtml += `<div class="dept-event-item" style="border-left-color: ${dept.dept_color}">${s.title}${desc}</div>`;
+                    bodyHtml += `< div class="dept-event-item" style = "border-left-color: ${dept.dept_color}" > ${s.title}${desc}</div > `;
                 });
-                bodyHtml += `</td>`;
+                bodyHtml += `</td > `;
             });
-            bodyHtml += `</tr>`;
-            
+            bodyHtml += `</tr > `;
+
             curr.setDate(curr.getDate() + 1);
         }
         tbody.innerHTML = bodyHtml;
@@ -3164,7 +3440,7 @@ const App = {
         const settings = (settingsItems && settingsItems.length > 0) ? settingsItems[0] : null;
 
         const result = settings || {};
-        
+
         // [DYNAMIC TITLE] Update Header & Tab Title based on settings
         this.updateBrand(result);
 
@@ -3201,12 +3477,12 @@ const App = {
 
     fetchDepartmentsWithFallback: async function (year = null) {
         const targetYear = year || this.state.currentYear || new Date().getFullYear();
-        
+
         // 1. Try Target Year
         let depts = await this.fetchDepartments(targetYear);
         if (depts && depts.length > 0) return depts;
 
-        console.log(`No active departments for ${targetYear}. Searching for fallback...`);
+        console.log(`No active departments for ${targetYear}.Searching for fallback...`);
 
         // 2. Find Closest Available Year
         const { data: years, error: yErr } = await window.SupabaseClient.supabase
@@ -3221,14 +3497,14 @@ const App = {
 
         if (!closestYear) return [];
 
-        console.log(`Using fallback departments from academic year: ${closestYear}`);
+        console.log(`Using fallback departments from academic year: ${closestYear} `);
         return await this.fetchDepartments(closestYear);
     },
 
     fetchSchedules: async function () {
         // Fetch all public schedules + visible internal ones
         let query = window.SupabaseClient.supabase.from('schedules').select('*');
-        
+
         // Guest visibility filter
         if (!this.state.user) {
             query = query.eq('visibility', 'public');
@@ -3283,7 +3559,7 @@ const App = {
                 if (item.academic_year && item.start_date) {
                     const ay = parseInt(item.academic_year);
                     const ayStart = `${ay}-03-01`;
-                    const ayEnd = `${ay + 1}-02-29`;
+                    const ayEnd = `${ay + 1}-02 - 29`;
                     if (item.start_date < ayStart || item.start_date > ayEnd) {
                         return; // Skip ghost data inconsistent with its academic year
                     }
@@ -3416,7 +3692,7 @@ const App = {
                 Object.entries(envs).forEach(([mmdd, name]) => {
                     const mm = parseInt(mmdd.split('-')[0]);
                     const y = (mm < 3) ? yVal + 1 : yVal;
-                    const dateStr = `${y}-${mmdd}`;
+                    const dateStr = `${y} -${mmdd} `;
                     addAdminRef(dateStr, name);
                     events.push({
                         start: dateStr,
@@ -3448,11 +3724,27 @@ const App = {
                 if (!this.state.user && s.visibility !== 'public') return;
 
                 const deptIdKey = s.dept_id ? String(s.dept_id) : null;
+
+                // [STRICT DEPT PRIVACY]
+                // If visibility is 'dept', ONLY Admin or Member of that Dept can see it.
+                if (s.visibility === 'dept') {
+                    // 1. Admin / Head(Principal)? user said "head/teacher IMPOSSIBLE".
+                    // But usually Admin (System Admin) needs to see all.
+                    // User said "admin and dept ... can read/edit". 
+                    // So 'admin' role is OK. 'head' role is NOT OK.
+                    const isAdmin = this.state.role === 'admin';
+
+                    // 2. Member of that Dept
+                    // We need to match s.dept_id with this.state.myDeptId
+                    const isMyDept = (this.state.role === 'dept' && this.state.myDeptId && String(this.state.myDeptId) === deptIdKey);
+
+                    if (!isAdmin && !isMyDept) return; // HIDDEN
+                }
                 const deptNameKey = s.dept_name;
 
                 // 2-Step Mapping: 1. By ID, 2. By Name (Fallback for orphaned data)
                 let dept = deptMap[deptIdKey] || (this.SPECIAL_DEPTS || []).find(sd => String(sd.id) == deptIdKey);
-                
+
                 if (!dept && deptNameKey) {
                     // Search in regular departments by name or short name
                     dept = (departments || []).find(d => d.dept_name === deptNameKey || d.dept_short === deptNameKey);
@@ -3493,14 +3785,14 @@ const App = {
         if (!container) return;
 
         container.innerHTML = departments.map(d => `
-            <div class="flex items-center gap-2">
-                <input type="checkbox" id="dept-${d.id}" value="${d.id}" class="dept-checkbox rounded ${d.is_special ? 'text-purple-600' : 'text-blue-600'} focus:ring-purple-500" checked>
-                <label for="dept-${d.id}" class="flex items-center gap-2 cursor-pointer w-full">
-                    <span class="w-3 h-3 rounded-full" style="background-color: ${d.dept_color}"></span>
-                    <span class="${d.is_special ? 'font-bold' : ''}">${d.dept_name}</span>
-                </label>
-            </div>
-        `).join('');
+    < div class="flex items-center gap-2" >
+        <input type="checkbox" id="dept-${d.id}" value="${d.id}" class="dept-checkbox rounded ${d.is_special ? 'text-purple-600' : 'text-blue-600'} focus:ring-purple-500" checked>
+            <label for="dept-${d.id}" class="flex items-center gap-2 cursor-pointer w-full">
+                <span class="w-3 h-3 rounded-full" style="background-color: ${d.dept_color}"></span>
+                <span class="${d.is_special ? 'font-bold' : ''}">${d.dept_name}</span>
+            </label>
+        </div>
+`).join('');
 
         // Add Event Listeners
         container.querySelectorAll('.dept-checkbox').forEach(cb => {
@@ -3525,7 +3817,7 @@ const App = {
             return;
         }
 
-        const canEdit = this.state.role === 'admin' || this.state.role === 'head_teacher' || this.state.role === 'head';
+        const canEdit = this.state.role === 'admin' || this.state.role === 'head_teacher' || this.state.role === 'head' || (this.state.role === 'dept' && this.state.myDeptId);
         if (!canEdit) {
             alert('일정 등록/수정 권한이 없습니다.');
             return;
@@ -3536,7 +3828,7 @@ const App = {
         try {
             if (!this.state.templates['schedule']) {
                 const response = await fetch('pages/modal-schedule.html');
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status} `);
                 this.state.templates['schedule'] = await response.text();
             }
             modalContainer.innerHTML = this.state.templates['schedule'];
@@ -3568,10 +3860,22 @@ const App = {
         const rFreq = document.getElementById('sched-freq');
         const rUntil = document.getElementById('sched-until');
 
-        // 4. Populate Departments
-        deptSelect.innerHTML = this.state.departments.map(d =>
+        // 4. Populate Departments (Filtered by Role)
+        let filteredDepts = this.state.departments;
+        if (this.state.role === 'dept' && this.state.myDeptId) {
+            filteredDepts = this.state.departments.filter(d => String(d.id) === String(this.state.myDeptId));
+        }
+
+        deptSelect.innerHTML = filteredDepts.map(d =>
             `<option value="${d.id}">${d.dept_name}</option>`
         ).join('');
+
+        // [DEPT ROLE] Set default or locked state
+        if (this.state.role === 'dept' && this.state.myDeptId) {
+            deptSelect.value = this.state.myDeptId;
+            // Default Visibility to 'dept' for NEW schedules, but allow change
+            if (!eventId) visSelect.value = 'dept';
+        }
 
         // 5. Load Data (Edit Mode) or Defaults
         if (eventId) {
@@ -3792,18 +4096,18 @@ const App = {
         try {
             if (!this.state.templates['print']) {
                 const response = await fetch('pages/modal-print.html');
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status} `);
                 this.state.templates['print'] = await response.text();
             }
             modalContainer.innerHTML = this.state.templates['print'];
             modalContainer.classList.remove('invisible');
-            
+
             // Handle Mode
             if (mode === 'list') {
                 const viewInput = document.querySelector('input[name="print-view"]');
                 if (viewInput) viewInput.value = 'weekly_plan'; // Distinguish from 'list' (calendar listMonth)
-                
-                const viewTitle = document.getElementById('print-view-title'); 
+
+                const viewTitle = document.getElementById('print-view-title');
                 if (viewTitle) viewTitle.textContent = '리스트형 (주간 계획서)';
 
                 const viewIcon = document.getElementById('print-view-icon');
@@ -3817,8 +4121,8 @@ const App = {
             } else if (mode === 'dept_list') {
                 const viewInput = document.querySelector('input[name="print-view"]');
                 if (viewInput) viewInput.value = 'dept_list';
-                
-                const viewTitle = document.getElementById('print-view-title'); 
+
+                const viewTitle = document.getElementById('print-view-title');
                 if (viewTitle) viewTitle.textContent = '부서별 일정 (월간)';
 
                 const viewIcon = document.getElementById('print-view-icon');
@@ -3845,28 +4149,28 @@ const App = {
                         // Generate relative to VIEWED DATE, not NOW
                         const d = new Date(vY, vM + m, 1);
                         const opt = document.createElement('option');
-                        opt.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-                        opt.textContent = `${d.getFullYear()}년 ${d.getMonth() + 1}월`;
-                        
+                        opt.value = `${d.getFullYear()} -${String(d.getMonth() + 1).padStart(2, '0')} `;
+                        opt.textContent = `${d.getFullYear()}년 ${d.getMonth() + 1} 월`;
+
                         // Set default to currently viewed month (m=0 is the current view)
                         if (m === 0) {
                             opt.selected = true;
                         }
                         monthSel.appendChild(opt);
                     }
-                    
+
                     // If viewedDate was not in the -2 to +6 range, add it as first option and select it
                     if (monthSel.selectedIndex === -1) {
                         const opt = document.createElement('option');
-                        opt.value = `${vY}-${String(vM + 1).padStart(2, '0')}`;
-                        opt.textContent = `${vY}년 ${vM + 1}월`;
+                        opt.value = `${vY} -${String(vM + 1).padStart(2, '0')} `;
+                        opt.textContent = `${vY}년 ${vM + 1} 월`;
                         opt.selected = true;
                         monthSel.prepend(opt);
                     }
-                    
+
                     const f2 = document.getElementById('print-dept-front2');
                     const b2 = document.getElementById('print-dept-back2');
-                    
+
                     const updateRange = () => {
                         const [y, m] = monthSel.value.split('-').map(Number);
                         const range = this.calculateDeptPrintRange(y, m, f2.checked, b2.checked);
@@ -3896,11 +4200,11 @@ const App = {
             const size = document.getElementById('print-size').value;
             const orient = document.getElementById('print-orient').value;
             const isScale = document.getElementById('print-scale').checked;
-            
+
             // Fixed: Handle both Radio (checked) and Hidden input types
             const viewInput = document.querySelector('input[name="print-view"]:checked') || document.querySelector('input[name="print-view"]');
             const viewType = viewInput ? viewInput.value : 'calendar';
-        
+
             const customStart = document.getElementById('print-start-date')?.value;
             const customEnd = document.getElementById('print-end-date')?.value;
 
@@ -4003,9 +4307,9 @@ const App = {
 
             const calendarTitle = document.querySelector('.fc-toolbar-title')?.textContent || '';
             printHeader.innerHTML = `
-                <div class="print-header-left">${calendarTitle}</div>
-                <div class="print-header-right">${schoolDisplayName}</div>
-            `;
+    < div class="print-header-left" > ${calendarTitle}</div >
+        <div class="print-header-right">${schoolDisplayName}</div>
+`;
         }
 
         // 4. Apply Classes to Body
@@ -4013,7 +4317,7 @@ const App = {
         const previousClasses = body.className;
 
         body.classList.add('printing-mode');
-        body.classList.add(`print-${size.toLowerCase()}`);
+        body.classList.add(`print - ${size.toLowerCase()} `);
         if (isScale) body.classList.add('print-scale');
 
         // 5. Inject @page Style Dynamically
@@ -4025,7 +4329,7 @@ const App = {
             document.head.appendChild(styleEl);
         }
         // USER REQUEST: margin 10mm
-        styleEl.textContent = `@page { size: ${size} ${orient}; margin: 10mm !important; }`;
+        styleEl.textContent = `@page { size: ${size} ${orient}; margin: 10mm!important; } `;
 
         // 6. Force Layout for Print: Expand fully without internal scroll
         if (viewType !== 'weekly_plan' && viewType !== 'dept_list' && this.state.calendar) {
@@ -4070,7 +4374,7 @@ const App = {
         try {
             if (!this.state.templates['excel']) {
                 const response = await fetch('pages/modal-excel.html');
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status} `);
                 this.state.templates['excel'] = await response.text();
             }
             modalContainer.innerHTML = this.state.templates['excel'];
@@ -4095,32 +4399,19 @@ const App = {
         let excelCount = 0;
         let yearDepartments = [];
 
-        // Function to refresh departments for selected year
-        const refreshYearDepts = async () => {
-            const selectedYear = parseInt(yearSelect.value);
-            yearDepartments = await this.fetchDepartments(selectedYear);
-            console.log(`Loaded ${yearDepartments.length} departments for year ${selectedYear}`);
-        };
-
-        // Initial fetch
-        await refreshYearDepts();
-
-        // Populate Year Options
+        // Populate Year Options (Do this first, synchronously)
         const currentYear = this.state.currentYear || new Date().getFullYear();
         yearSelect.innerHTML = '';
-        const years = [];
         for (let i = -5; i <= 5; i++) {
-            years.push(currentYear + i);
-        }
-        years.forEach(y => {
+            const y = currentYear + i;
             const opt = document.createElement('option');
             opt.value = y;
-            opt.text = `${y}학년도`;
+            opt.text = `${y} 학년도`;
             if (y === currentYear) opt.selected = true;
             yearSelect.appendChild(opt);
-        });
+        }
 
-        // Close handlers
+        // Close handlers (Bind immediately)
         const close = () => {
             modalContainer.classList.add('invisible');
             modalContainer.innerHTML = '';
@@ -4128,24 +4419,19 @@ const App = {
         document.getElementById('btn-excel-close').onclick = close;
         document.getElementById('btn-excel-cancel').onclick = close;
 
-        // Template Download
+        // Template Download (Bind immediately)
         document.getElementById('btn-download-template').onclick = () => {
             const wb = XLSX.utils.book_new();
             const ws_data = [
                 ['구분(기본/휴일/일반)', '부서명(일반인 경우)', '일정명', '시작일(YYYY-MM-DD)', '종료일(YYYY-MM-DD)', '내용', '공개범위(전체/교직원/부서)', '주말포함(on)'],
-                // 학기/방학 행사
                 ['기본', '', '여름방학', '2026-07-22', '2026-08-12', '', '전체'],
                 ['기본', '', '겨울방학', '2026-01-07', '', '', '전체'],
                 ['기본', '', '봄방학', '', '', '', '전체'],
-
-                // 고사 일정 (범위)
                 ['기본', '', '1학기 1차지필', '2026-04-24', '2026-04-29', '', '전체'],
                 ['기본', '', '1학기 2차지필', '2026-06-30', '2026-07-06', '', '전체'],
                 ['기본', '', '2학기 1차지필', '2026-09-30', '2026-10-06', '', '전체'],
                 ['기본', '', '2학기 2차지필', '2026-12-10', '2026-12-16', '', '전체'],
                 ['기본', '', '3학년 2학기 2차지필', '', '', '', '전체'],
-
-                // 예시
                 ['휴일', '', '대체공휴일', '2026-05-06', '2026-05-06', '', '전체'],
                 ['일반', '교무기획부', '학부모총회', '2026-03-15', '2026-03-16', '강당', '전체']
             ];
@@ -4153,6 +4439,9 @@ const App = {
             XLSX.utils.book_append_sheet(wb, ws, '일정양식');
             XLSX.writeFile(wb, "학사일정_일괄등록_양식.xlsx");
         };
+
+        // Async Refresh (Do this later)
+        refreshYearDepts();
 
         // File Select & Parse
         fileInput.onchange = (e) => {
@@ -4230,7 +4519,7 @@ const App = {
                             const y = v.getFullYear();
                             const m = String(v.getMonth() + 1).padStart(2, '0');
                             const d = String(v.getDate()).padStart(2, '0');
-                            return `${y}-${m}-${d}`;
+                            return `${y} -${m} -${d} `;
                         }
                         return v.toString().trim();
                     };
@@ -4251,7 +4540,7 @@ const App = {
                             return;
                         }
 
-                        errors.push(`${idx + 2}행: 필수 정보 누락 (일정명, 시작일)`);
+                        errors.push(`${idx + 2} 행: 필수 정보 누락(일정명, 시작일)`);
                         return;
                     }
 
@@ -4286,37 +4575,46 @@ const App = {
                     } else if (typeRaw === '일반') {
                         // Match Dept by Name (NFC normalizable)
                         const normalize = (s) => (s || '').normalize('NFC').replace(/\s+/g, '');
-                        const targetNorm = normalize(deptName);
+                        let targetDept = null;
 
-                        const dept = depts.find(d => normalize(d.dept_name) === targetNorm);
+                        if (!deptName) {
+                            // Rule 1: Empty Dept Name -> Link to 'head' or '부장'
+                            targetDept = depts.find(d => normalize(d.dept_id_en) === 'head') ||
+                                depts.find(d => normalize(d.dept_name).includes('부장')) ||
+                                depts[0];
+                        } else {
+                            // Rule 2: Specific Dept Name -> Find match
+                            const targetNorm = normalize(deptName);
+                            targetDept = depts.find(d => normalize(d.dept_name) === targetNorm);
 
-                        if (deptName && !dept) {
-                            errors.push(`${idx + 2}행: 부서명 오류 ('${deptName}'은(는) ${selectedYear}학년도에 존재하지 않습니다.)`);
+                            if (!targetDept) {
+                                errors.push(`${idx + 2}행: 부서명 오류('${deptName}'은(는) ${selectedYear}학년도에 존재하지 않습니다.)`);
+                                // Fallback to avoid null errors during insert, though this row has an error
+                                targetDept = { id: null };
+                            }
                         }
 
-                        // Use found dept or fallback to first one if name was provided but not found
-                        const finalDept = dept || depts[0] || { id: null };
+                        if (targetDept && targetDept.id) {
+                            // Map Visibility
+                            let visibility = 'internal';
+                            if (visibilityRaw === '전체') visibility = 'public';
+                            else if (visibilityRaw === '부서') visibility = 'dept';
 
-                        // Map Visibility
-                        let visibility = 'internal';
-                        if (visibilityRaw === '전체') visibility = 'public';
-                        else if (visibilityRaw === '부서') visibility = 'dept';
-
-                        parsedNormal.push({
-                            title,
-                            start_date: start,
-                            end_date: end || start,
-                            description: desc || '',
-                            dept_id: finalDept.id,
-                            dept_name: deptName, // Store raw name for recovery
-                            visibility,
-                            author_id: this.state.user.id,
-                            is_printable: true,
-                            weekend: weekendRaw === 'on' ? 'on' : null
-                        });
-                        excelCount++;
+                            parsedNormal.push({
+                                title,
+                                start_date: start,
+                                end_date: end || start,
+                                description: desc || '',
+                                dept_id: targetDept.id,
+                                visibility,
+                                author_id: this.state.user.id,
+                                is_printable: true,
+                                weekend: weekendRaw === 'on' ? 'on' : null
+                            });
+                            excelCount++;
+                        }
                     } else {
-                        errors.push(`${idx + 2}행: 구분 값 오류 ('기본', '휴일', 또는 '일반' 입력)`);
+                        errors.push(`${idx + 2} 행: 구분 값 오류('기본', '휴일', 또는 '일반' 입력)`);
                     }
                 });
 
@@ -4447,27 +4745,27 @@ const App = {
                 }
 
                 if (excelCount > 0) {
-                    statusArea.innerHTML = `<span class="text-green-600 font-bold">총 ${excelCount}건의 일정 발견</span>`;
+                    statusArea.innerHTML = `< span class="text-green-600 font-bold" > 총 ${excelCount}건의 일정 발견</span > `;
                     btnUpload.disabled = false;
                     btnUpload.classList.remove('opacity-50', 'cursor-not-allowed');
                 } else {
                     let debugMsg = '총 0건의 일정이 발견되었습니다.\n';
                     if (rawRows && rawRows.length > 0) {
                         const firstRow = rawRows[0];
-                        const rowData = firstRow.map((v, i) => `[${i}] ${v}`).join(', ');
+                        const rowData = firstRow.map((v, i) => `[${i}] ${v} `).join(', ');
                         debugMsg += `\n[디버깅 정보]\n`;
-                        debugMsg += `첫 행 데이터 길이: ${firstRow.length}\n`;
-                        debugMsg += `데이터 내용: ${rowData}\n`;
+                        debugMsg += `첫 행 데이터 길이: ${firstRow.length} \n`;
+                        debugMsg += `데이터 내용: ${rowData} \n`;
                         debugMsg += `\n[매핑 시도]\n`;
                         debugMsg += `구분(Col 0): "${(firstRow[0] || '').toString().trim()}"\n`;
                         debugMsg += `제목(Col 2): "${(firstRow[2] || '').toString().trim()}"\n`;
                         if (errors.length > 0) {
-                            debugMsg += `\n[오류 메시지(3건)]\n${errors.slice(0, 3).join('\n')}`;
+                            debugMsg += `\n[오류 메시지(3건)]\n${errors.slice(0, 3).join('\n')} `;
                         }
                     } else {
                         debugMsg += '데이터 행이 비어있습니다.';
                     }
-                    statusArea.innerHTML = `<span class="text-red-500 font-bold">발견된 일정이 없습니다.</span>`;
+                    statusArea.innerHTML = `< span class="text-red-500 font-bold" > 발견된 일정이 없습니다.</span > `;
                     alert(debugMsg);
                 }
             };
@@ -4489,9 +4787,9 @@ const App = {
             const total = parsedBasic.length + parsedNormal.length;
             const autoCount = total - excelCount;
 
-            let confirmMsg = `${selectedYear}학년도 학사일정 ${excelCount}건을 등록하시겠습니까?`;
+            let confirmMsg = `${selectedYear}학년도 학사일정 ${excelCount}건을 등록하시겠습니까 ? `;
             if (autoCount > 0) {
-                confirmMsg += `\n\n(방학식, 개학일 등 ${autoCount}건의 일정이 자동으로 추가 생성됩니다. 총 ${total}건)`;
+                confirmMsg += `\n\n(방학식, 개학일 등 ${autoCount}건의 일정이 자동으로 추가 생성됩니다.총 ${total}건)`;
             }
 
             if (!confirm(confirmMsg)) return;
@@ -4539,7 +4837,7 @@ const App = {
         try {
             if (!this.state.templates['dept-import']) {
                 const response = await fetch('pages/modal-dept-import.html');
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status} `);
                 this.state.templates['dept-import'] = await response.text();
             }
             modalContainer.innerHTML = this.state.templates['dept-import'];
@@ -4569,13 +4867,13 @@ const App = {
         for (let y = currentYear - 5; y <= currentYear + 5; y++) {
             const optF = document.createElement('option');
             optF.value = y;
-            optF.textContent = `${y}학년도`;
+            optF.textContent = `${y} 학년도`;
             if (y === currentYear - 1) optF.selected = true;
             fromYearSelect.appendChild(optF);
 
             const optT = document.createElement('option');
             optT.value = y;
-            optT.textContent = `${y}학년도`;
+            optT.textContent = `${y} 학년도`;
             if (y === currentYear) optT.selected = true;
             toYearSelect.appendChild(optT);
         }
@@ -4590,7 +4888,7 @@ const App = {
                     return;
                 }
 
-                if (!confirm(`${fy}학년도 부서 정보를 ${ty}학년도로 가져오시겠습니까?\n\n※ 이미 등록된 부서는 정보가 업데이트되고, 없는 부서는 새로 추가됩니다.`)) return;
+                if (!confirm(`${fy}학년도 부서 정보를 ${ty}학년도로 가져오시겠습니까 ?\n\n※ 이미 등록된 부서는 정보가 업데이트되고, 없는 부서는 새로 추가됩니다.`)) return;
 
                 btnSubmit.disabled = true;
                 btnSubmit.innerHTML = '가져오는 중...';
@@ -4715,9 +5013,9 @@ const App = {
                     const [m, d] = mmdd.split('-').map(Number);
                     // Academic Year Y covers March Y to Feb Y+1
                     const year = (m < 3) ? (activeAY + 1) : activeAY;
-                    const dateStr = `${year}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                    const dateStr = `${year} -${String(m).padStart(2, '0')} -${String(d).padStart(2, '0')} `;
                     envSource.push({
-                        id: `env-${mmdd}`,
+                        id: `env - ${mmdd} `,
                         title: title,
                         start_date: dateStr,
                         end_date: dateStr,
@@ -4737,7 +5035,7 @@ const App = {
                     if (!dept) {
                         dept = (this.SPECIAL_DEPTS || []).find(d => String(d.id) == deptIdKey);
                     }
-                    
+
                     if (!dept && deptNameKey) {
                         dept = (this.state.allDepartmentsCached || []).find(d => d.dept_name === deptNameKey || d.dept_short === deptNameKey);
                         if (!dept) {
@@ -4746,9 +5044,9 @@ const App = {
                     }
 
                     const deptName = dept ? (dept.dept_short || dept.short_name || dept.dept_name || dept.name) : '';
-                    const prefix = deptName ? `(${deptName}) ` : '';
+                    const prefix = deptName ? `(${deptName})` : '';
                     const suffix = s.description ? `(${s.description})` : '';
-                    return { ...s, title: `${prefix}${s.title}${suffix}`, isBasic: false };
+                    return { ...s, title: `${prefix}${s.title}${suffix} `, isBasic: false };
                 }),
                 ...(this.state.basicSchedules || []).map(b => ({
                     id: b.id,
@@ -4777,7 +5075,7 @@ const App = {
 
                 // Match search query
                 return s.title.toLowerCase().includes(query) ||
-                       (s.description && s.description.toLowerCase().includes(query));
+                    (s.description && s.description.toLowerCase().includes(query));
             }).sort((a, b) => {
                 // Primary: Start Date
                 if (a.start_date !== b.start_date) return a.start_date.localeCompare(b.start_date);
@@ -4787,22 +5085,22 @@ const App = {
 
             searchResults.classList.remove('hidden');
             if (matches.length === 0) {
-                searchResults.innerHTML = `<div class="text-gray-400 p-2 text-xs">검색 결과가 없습니다.</div>`;
+                searchResults.innerHTML = `< div class="text-gray-400 p-2 text-xs" > 검색 결과가 없습니다.</div > `;
             } else {
                 searchResults.innerHTML = matches.map(s => {
                     const isRange = s.end_date && s.end_date !== s.start_date;
-                    const dateDisplay = isRange ? `${s.start_date} ~ ${s.end_date}` : s.start_date;
-                    
+                    const dateDisplay = isRange ? `${s.start_date} ~${s.end_date} ` : s.start_date;
+
                     let typeTag = '';
-                    if (s.isBasic) typeTag = `<span class="bg-blue-50 text-blue-600 px-1 rounded mr-1">학사</span>`;
-                    else if (s.isEnv) typeTag = `<span class="bg-green-50 text-green-600 px-1 rounded mr-1">환경</span>`;
-                    
+                    if (s.isBasic) typeTag = `< span class="bg-blue-50 text-blue-600 px-1 rounded mr-1" > 학사</span > `;
+                    else if (s.isEnv) typeTag = `< span class="bg-green-50 text-green-600 px-1 rounded mr-1" > 환경</span > `;
+
                     return `
-                        <div class="cursor-pointer hover:bg-purple-50 p-2 rounded border-b last:border-0" data-date="${s.start_date}">
+    < div class="cursor-pointer hover:bg-purple-50 p-2 rounded border-b last:border-0" data - date="${s.start_date}" >
                             <div class="font-bold text-gray-700 text-xs truncate">${typeTag}${s.title}</div>
                             <div class="text-[10px] text-gray-500">${dateDisplay}</div>
-                        </div>
-                    `;
+                        </div >
+    `;
                 }).join('');
 
                 searchResults.querySelectorAll('div[data-date]').forEach(el => {
@@ -4824,7 +5122,7 @@ const App = {
 
     refreshCalendarData: async function (start, end) {
         const fetchId = ++this.state._lastFetchId;
-        
+
         const startY = start.getFullYear();
         const endY = end.getFullYear();
         const academicYears = [];
@@ -4886,8 +5184,8 @@ const App = {
         // For sidebar filter list: Only active departments of the CURRENTLY VIEWED academic year
         const viewDepartments = allDepartments.filter(d => d.is_active && d.academic_year == activeAY);
 
-        this.state.allDepartmentsCached = allDepartments; 
-        this.state.departments = viewDepartments; 
+        this.state.allDepartmentsCached = allDepartments;
+        this.state.departments = viewDepartments;
         this.state.schedules = schedules;
         this.state.basicSchedules = allBasicSchedules;
 
@@ -5140,7 +5438,7 @@ const App = {
                 const deptShort = group.info.dept_short || group.info.dept_name.substring(0, 2);
                 const deptFull = group.info.dept_name;
                 deptHeader.innerHTML = `
-                    <span style="color:${group.info.dept_color}">◈</span> 
+                    <span style="color:${group.info.dept_color}">◈</span>
                     <span class="dept-name-full">${deptFull}</span>
                     <span class="dept-name-short">${deptShort}</span>
                 `;
@@ -5185,12 +5483,12 @@ const App = {
 
                     const textSpan = document.createElement('span');
                     const titleText = (ev.extendedProps && ev.extendedProps.description)
-                        ? `· ${ev.title}(${ev.extendedProps.description})`
-                        : `· ${ev.title}`;
-                    textSpan.textContent = titleText;
+                        ? `· ${ev.title} (${ev.extendedProps.description})`
+                        : `· ${ev.title} `;
+                    textSpan.innerHTML = titleText; // [FIX] Render HTML
                     evDiv.appendChild(textSpan);
 
-                    evDiv.title = titleText;
+                    evDiv.title = titleText.replace(/<[^>]*>?/gm, ''); // [FIX] Strip tags for tooltip
                     evDiv.onclick = (e) => {
                         e.stopPropagation();
                         this.openScheduleModal(ev.id);
@@ -5269,7 +5567,7 @@ const App = {
             const finalGap = Math.max(60, heightPerWeek);
 
             bottomEls.forEach(el => {
-                el.style.height = `${finalGap}px`;
+                el.style.height = `${finalGap} px`;
             });
 
             // Force FullCalendar to sync after we modified internal DOM

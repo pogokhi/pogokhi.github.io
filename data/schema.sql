@@ -18,6 +18,10 @@ ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
 
 -- user_roles Policies
 CREATE POLICY "Public Read User Roles" ON public.user_roles FOR SELECT TO public USING (true);
+-- Explicit policy for authenticated users to ensure 403 is avoided for self-lookup
+CREATE POLICY "Authenticated Read Self" ON public.user_roles FOR SELECT TO authenticated 
+    USING (user_id = (select auth.uid()));
+
 -- Users can update their own last_login (handled via upsert in syncUser)
 CREATE POLICY "Users Update Own Role Meta" ON public.user_roles FOR UPDATE TO authenticated 
     USING (user_id = (select auth.uid()))
@@ -80,12 +84,16 @@ CREATE TABLE IF NOT EXISTS public.departments (
     academic_year integer NOT NULL,
     dept_name text NOT NULL,
     dept_short text,
+    dept_id_en text,       -- ID for department role matching (e.g. 'science')
     dept_color text DEFAULT '#3788d8',
     sort_order integer DEFAULT 0,
     is_active boolean DEFAULT true,
     is_printable boolean DEFAULT true,
     created_at timestamp with time zone DEFAULT now()
 );
+
+-- [Migration] 기존에 departments 테이블이 이미 있는 경우 아래 명령어로 컬럼을 추가하세요:
+-- ALTER TABLE public.departments ADD COLUMN IF NOT EXISTS dept_id_en text;
 
 ALTER TABLE public.departments ENABLE ROW LEVEL SECURITY;
 
@@ -153,10 +161,11 @@ CREATE INDEX IF NOT EXISTS idx_departments_year ON public.departments(academic_y
 CREATE INDEX IF NOT EXISTS idx_schedules_date ON public.schedules(start_date);
 
 
--- [Fix Permissions for GOELink Test]
--- Grant usage and select permissions to public/anon roles to fix 401 Unauthorized errors.
+-- [Fix Permissions for PogokLink]
+-- Grant usage and select permissions to public/anon roles to fix 401/403 errors.
 
-GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT SELECT, UPDATE ON public.user_roles TO anon, authenticated;
 
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
@@ -164,4 +173,31 @@ GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
 
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
+-- 7. [Auth Logic] User Roles Auto-Registration & Migration
+-- This function handles automatic insertion into public.user_roles when a new auth user is created.
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.user_roles (user_id, email, role, status, last_login)
+  VALUES (new.id, new.email, 'teacher', 'pending', now())
+  ON CONFLICT (user_id) DO NOTHING;
+  RETURN new;
+END;
+$$;
+
+-- Trigger: on_auth_user_created
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW
+  EXECUTE PROCEDURE public.handle_new_user();
+
+-- Migration: Sync existing auth.users to public.user_roles if missing
+INSERT INTO public.user_roles (user_id, email, role, status)
+SELECT id, email, 'teacher', 'pending'
+FROM auth.users
+WHERE id NOT IN (SELECT user_id FROM public.user_roles)
+ON CONFLICT (user_id) DO NOTHING;
