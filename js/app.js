@@ -3847,19 +3847,19 @@ const App = {
 
                 const deptIdKey = s.dept_id ? String(s.dept_id) : null;
 
+                // [STRICT DEPT SCOPING]
+                // For users with 'dept' role, ONLY show schedules belonging to their department.
+                // This applies to ALL visibility levels (internal, public, etc) for this role.
+                if (this.state.role === 'dept') {
+                    const isMyDept = (this.state.myDeptId && String(this.state.myDeptId) === deptIdKey);
+                    if (!isMyDept) return; // HIDDEN
+                }
+
                 // [STRICT DEPT PRIVACY]
                 // If visibility is 'dept', ONLY Admin or Member of that Dept can see it.
                 if (s.visibility === 'dept') {
-                    // 1. Admin / Head(Principal)? user said "head/teacher IMPOSSIBLE".
-                    // But usually Admin (System Admin) needs to see all.
-                    // User said "admin and dept ... can read/edit". 
-                    // So 'admin' role is OK. 'head' role is NOT OK.
                     const isAdmin = this.state.role === 'admin';
-
-                    // 2. Member of that Dept
-                    // We need to match s.dept_id with this.state.myDeptId
                     const isMyDept = (this.state.role === 'dept' && this.state.myDeptId && String(this.state.myDeptId) === deptIdKey);
-
                     if (!isAdmin && !isMyDept) return; // HIDDEN
                 }
                 const deptNameKey = s.dept_name;
