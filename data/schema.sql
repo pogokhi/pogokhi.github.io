@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS public.departments (
     dept_name text NOT NULL,
     dept_short text,
     dept_id_en text,       -- ID for department role matching (e.g. 'science')
+
     dept_color text DEFAULT '#3788d8',
     sort_order integer DEFAULT 0,
     is_active boolean DEFAULT true,
@@ -167,6 +168,7 @@ CREATE INDEX IF NOT EXISTS idx_schedules_date ON public.schedules(start_date);
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
 GRANT SELECT, UPDATE ON public.user_roles TO anon, authenticated;
 
+
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
@@ -201,3 +203,4 @@ SELECT id, email, 'teacher', 'pending'
 FROM auth.users
 WHERE id NOT IN (SELECT user_id FROM public.user_roles)
 ON CONFLICT (user_id) DO NOTHING;
+

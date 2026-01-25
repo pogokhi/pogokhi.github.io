@@ -142,6 +142,7 @@ const App = {
             // 2.5 Load Initial Settings (for Dynamic Title etc)
             const settings = await this.fetchSettings();
 
+
             // Check if settings exist (fresh project check)
             if (!settings.academic_year) {
                 alert("학년도를 설정한 후 이용할 수 있습니다. 관리자로 접속하여 학년도를 설정해주세요.");
