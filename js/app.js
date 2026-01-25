@@ -3136,6 +3136,19 @@ const App = {
                 const overlaps = checkOverlap(sStart, sEnd, dateStr);
                 if (!overlaps) return false;
 
+                // [DEPT SCOPING]
+                if (this.state.role === 'dept') {
+                    const isMyDept = (this.state.myDeptId && String(this.state.myDeptId) === String(s.dept_id));
+                    if (!isMyDept) return false;
+                }
+
+                // [STRICT PRIVATE CHECK]
+                if (s.visibility === 'private') {
+                    const isAdmin = this.state.role === 'admin';
+                    const isCreator = this.state.user && s.user_id && String(s.user_id) === String(this.state.user.id);
+                    if (!isAdmin && !isCreator) return false;
+                }
+
                 // Holiday/Weekend Filter:
                 // If it is a non-school day (Weekend or Holiday), 
                 // ONLY show schedules that have 'weekend' flag set.
@@ -3442,8 +3455,13 @@ const App = {
                     if (s.start_date !== dateStr) return false;
 
                     // [STRICT DEPT PRIVACY]
+                    const isAdmin = this.state.role === 'admin';
+                    if (s.visibility === 'private') {
+                        const isCreator = this.state.user && s.user_id && String(s.user_id) === String(this.state.user.id);
+                        if (!isAdmin && !isCreator) return false;
+                    }
+
                     if (s.visibility === 'dept') {
-                        const isAdmin = this.state.role === 'admin';
                         const isMyDept = (this.state.role === 'dept' && this.state.myDeptId && String(this.state.myDeptId) === String(s.dept_id));
                         if (!isAdmin && !isMyDept) return false;
                     }
