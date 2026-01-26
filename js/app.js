@@ -3455,13 +3455,8 @@ const App = {
                     if (s.start_date !== dateStr) return false;
 
                     // [STRICT DEPT PRIVACY]
-                    const isAdmin = this.state.role === 'admin';
-                    if (s.visibility === 'private') {
-                        const isCreator = this.state.user && s.user_id && String(s.user_id) === String(this.state.user.id);
-                        if (!isAdmin && !isCreator) return false;
-                    }
-
                     if (s.visibility === 'dept') {
+                        const isAdmin = this.state.role === 'admin';
                         const isMyDept = (this.state.role === 'dept' && this.state.myDeptId && String(this.state.myDeptId) === String(s.dept_id));
                         if (!isAdmin && !isMyDept) return false;
                     }
@@ -4586,22 +4581,6 @@ const App = {
         };
 
         // Async Refresh (Do this later)
-        const refreshYearDepts = async () => {
-            const selectedYear = parseInt(yearSelect.value);
-            try {
-                const { data, error } = await window.SupabaseClient.supabase
-                    .from('departments')
-                    .select('id, dept_name, dept_id_en')
-                    .eq('academic_year', selectedYear);
-                if (error) throw error;
-                yearDepartments = data || [];
-                statusArea.innerHTML = '';
-            } catch (e) {
-                console.error("Failed to load departments for year", e);
-                statusArea.innerHTML = `<span class="text-red-500">부서 정보를 불러오는데 실패했습니다.</span>`;
-            }
-        };
-
         refreshYearDepts();
 
         // File Select & Parse
@@ -4680,7 +4659,7 @@ const App = {
                             const y = v.getFullYear();
                             const m = String(v.getMonth() + 1).padStart(2, '0');
                             const d = String(v.getDate()).padStart(2, '0');
-                            return `${y}-${m}-${d}`;
+                            return `${y} -${m} -${d} `;
                         }
                         return v.toString().trim();
                     };
@@ -4749,8 +4728,7 @@ const App = {
                             targetDept = depts.find(d => normalize(d.dept_name) === targetNorm);
 
                             if (!targetDept) {
-                                const availableDepts = depts.map(d => d.dept_name).join(', ');
-                                errors.push(`${idx + 2}행: 부서명 오류('${deptName}'은(는) ${selectedYear}학년도에 존재하지 않습니다.)\n(현재 등록된 부서: ${availableDepts})`);
+                                errors.push(`${idx + 2}행: 부서명 오류('${deptName}'은(는) ${selectedYear}학년도에 존재하지 않습니다.)`);
                                 // Fallback to avoid null errors during insert, though this row has an error
                                 targetDept = { id: null };
                             }
