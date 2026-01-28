@@ -3149,6 +3149,14 @@ const App = {
                     if (!isAdmin && !isCreator) return false;
                 }
 
+                // [STRICT DEPT PRIVACY]
+                // If visibility is 'dept', ONLY Admin or Member of that Dept can see it.
+                if (s.visibility === 'dept') {
+                    const isAdmin = this.state.role === 'admin';
+                    const isMyDept = (this.state.role === 'dept' && this.state.myDeptId && String(this.state.myDeptId) === String(s.dept_id));
+                    if (!isAdmin && !isMyDept) return false; // HIDDEN
+                }
+
                 // Holiday/Weekend Filter:
                 // If it is a non-school day (Weekend or Holiday), 
                 // ONLY show schedules that have 'weekend' flag set.
