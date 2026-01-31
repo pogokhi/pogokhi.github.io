@@ -1440,7 +1440,7 @@ const App = {
     calculateMergedHolidays: function (academicYear) {
         const year = parseInt(academicYear);
         const baseHolidays = {
-            "0301": "삼일절", "0501": "근로자의날", "0505": "어린이날",
+            "0301": "삼일절", "0501": "노동절", "0505": "어린이날",
             "0606": "현충일", "0717": "제헌절", "0815": "광복절", "1003": "개천절",
             "1009": "한글날", "1225": "성탄절", "0101": "신정"
         };
