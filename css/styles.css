@@ -33,12 +33,14 @@ html {
     html,
     body {
         height: 100vh;
+        height: 100dvh;
         overflow: hidden;
         /* Prevent body scroll, use inner scroll */
     }
 
     #app {
         height: 100%;
+        height: 100dvh;
         overflow: hidden;
     }
 
@@ -1282,7 +1284,11 @@ html {
     #main-header .max-w-7xl {
         height: 52px !important;
     }
-    #btn-admin, #btn-logout, #btn-login, #btn-dept-calendar, #btn-list-calendar {
+    #btn-admin,
+    #btn-logout,
+    #btn-login,
+    #btn-dept-calendar,
+    #btn-list-calendar {
         height: 28px !important;
         padding: 0 8px !important;
         font-size: 0.8rem !important;

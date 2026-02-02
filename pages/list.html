@@ -8,7 +8,7 @@
         <div
             class="flex flex-col md:flex-row items-center gap-2 md:gap-4 w-full md:w-auto"
         >
-            <!-- Row 1 (Mobile): Title + Nav Buttons -->
+            <!-- Row 1 (Mobile): Title Only -->
             <div
                 class="flex items-center justify-between w-full md:w-auto md:justify-start gap-4"
             >
@@ -18,59 +18,37 @@
                 >
                     &nbsp;주간 계획서
                 </h2>
-
-                <!-- Nav Buttons Group -->
-                <div class="flex items-center gap-2">
-                    <button
-                        id="btn-list-today"
-                        class="px-3 py-1 text-sm border rounded hover:bg-gray-50 transition"
-                    >
-                        오늘
-                    </button>
-                </div>
             </div>
 
-            <!-- Row 2 (Mobile): Selects + Range + Toggle -->
+            <!-- Row 2 (Mobile): 오늘 + Selects + Toggle -->
             <div
                 class="flex items-center justify-between w-full md:w-auto gap-2 text-sm"
             >
-                <!-- Dropdowns -->
-                <div class="flex items-center gap-1">
-                    <select
-                        id="list-nav-year"
-                        class="border rounded px-1 py-1 bg-white focus:ring-2 focus:ring-purple-500 outline-none"
+                <div class="flex items-center gap-2">
+                    <!-- Nav Today Moved Here -->
+                    <button
+                        id="btn-list-today"
+                        class="px-2 py-1 text-xs sm:text-sm border rounded hover:bg-gray-50 transition"
                     >
-                        <!-- JS populated -->
-                    </select>
-                    <select
-                        id="list-nav-month"
-                        class="border rounded px-1 py-1 bg-white focus:ring-2 focus:ring-purple-500 outline-none"
-                    >
-                        <!-- JS populated -->
-                    </select>
-                </div>
+                        오늘
+                    </button>
 
-                <!-- Range -->
-                <!-- Range Navigation -->
-                <button
-                    id="btn-list-prev"
-                    class="p-0.5 hover:bg-gray-100 rounded text-gray-600 transition flex justify-center items-center"
-                >
-                    <span class="material-symbols-outlined text-lg"
-                    >chevron_left</span>
-                </button>
-                <div
-                    id="list-date-range"
-                    class="font-medium text-gray-600 whitespace-nowrap text-xs sm:text-sm"
-                >
+                    <!-- Dropdowns -->
+                    <div class="flex items-center gap-1">
+                        <select
+                            id="list-nav-year"
+                            class="border rounded px-1 py-1 bg-white focus:ring-2 focus:ring-purple-500 outline-none"
+                        >
+                            <!-- JS populated -->
+                        </select>
+                        <select
+                            id="list-nav-month"
+                            class="border rounded px-1 py-1 bg-white focus:ring-2 focus:ring-purple-500 outline-none"
+                        >
+                            <!-- JS populated -->
+                        </select>
+                    </div>
                 </div>
-                <button
-                    id="btn-list-next"
-                    class="p-0.5 hover:bg-gray-100 rounded text-gray-600 transition flex justify-center items-center"
-                >
-                    <span class="material-symbols-outlined text-lg"
-                    >chevron_right</span>
-                </button>
 
                 <!-- Toggle -->
                 <div class="flex bg-gray-100 rounded p-0.5 shrink-0">
@@ -87,6 +65,32 @@
                         2주
                     </button>
                 </div>
+            </div>
+
+            <!-- Row 3 (Mobile): Range Navigation -->
+            <div
+                class="flex items-center justify-center md:justify-start w-full md:w-auto gap-2 text-sm"
+            >
+                <button
+                    id="btn-list-prev"
+                    class="p-0.5 hover:bg-gray-100 rounded text-gray-600 transition flex justify-center items-center"
+                >
+                    <span class="material-symbols-outlined text-lg"
+                        >chevron_left</span
+                    >
+                </button>
+                <div
+                    id="list-date-range"
+                    class="font-medium text-gray-600 whitespace-nowrap text-xs sm:text-sm"
+                ></div>
+                <button
+                    id="btn-list-next"
+                    class="p-0.5 hover:bg-gray-100 rounded text-gray-600 transition flex justify-center items-center"
+                >
+                    <span class="material-symbols-outlined text-lg"
+                        >chevron_right</span
+                    >
+                </button>
             </div>
         </div>
 
