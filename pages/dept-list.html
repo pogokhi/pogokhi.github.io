@@ -9,27 +9,23 @@
             </h2>
             <div class="flex items-center gap-2">
                 <button
-                    id="btn-dept-prev"
-                    class="p-1 hover:bg-gray-100 rounded text-gray-600 transition flex justify-center items-center"
-                >
-                    <span class="material-symbols-outlined">chevron_left</span>
-                </button>
-                <button
                     id="btn-dept-today"
                     class="px-3 py-1 text-sm border rounded hover:bg-gray-50 transition"
                 >
                     오늘
                 </button>
+
+                <!-- Prev Button -->
                 <button
-                    id="btn-dept-next"
-                    class="p-1 hover:bg-gray-100 rounded text-gray-600 transition flex justify-center items-center"
+                    id="btn-dept-prev"
+                    class="ml-2 p-1 hover:bg-gray-100 rounded text-gray-600 transition flex justify-center items-center"
                 >
-                    <span class="material-symbols-outlined">chevron_right</span>
+                    <span class="material-symbols-outlined">chevron_left</span>
                 </button>
 
                 <select
                     id="dept-nav-year"
-                    class="ml-2 border rounded px-2 py-1 text-sm bg-white focus:ring-2 focus:ring-purple-500 outline-none"
+                    class="border rounded px-2 py-1 text-sm bg-white focus:ring-2 focus:ring-purple-500 outline-none"
                 >
                     <!-- JS populated -->
                 </select>
@@ -39,6 +35,14 @@
                 >
                     <!-- JS populated -->
                 </select>
+
+                <!-- Next Button -->
+                <button
+                    id="btn-dept-next"
+                    class="p-1 hover:bg-gray-100 rounded text-gray-600 transition flex justify-center items-center"
+                >
+                    <span class="material-symbols-outlined">chevron_right</span>
+                </button>
             </div>
         </div>
 

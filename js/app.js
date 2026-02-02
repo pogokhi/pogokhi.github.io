@@ -143,6 +143,25 @@ const App = {
             // 2. Check Auth State
             await this.checkAuth();
 
+            // 2. Check Auth State
+            await this.checkAuth();
+
+            // [RESTORE STATE] Check if we just reloaded
+            const savedDate = sessionStorage.getItem('pogok_reload_date');
+            const savedView = sessionStorage.getItem('pogok_reload_view');
+            if (savedDate) {
+                this.state.initialDate = new Date(savedDate);
+                sessionStorage.removeItem('pogok_reload_date'); // Consume
+                console.log("[Init] Restored Date:", this.state.initialDate);
+            }
+            if (savedView) {
+                // If view logic supports explicit initial view, we can use it, 
+                // but usually URL hash or default handles it.
+                // We just rely on state here.
+                this.state.viewMode = savedView;
+                sessionStorage.removeItem('pogok_reload_view');
+            }
+
             // 2.5 Load Initial Settings (for Dynamic Title etc)
             const settings = await this.fetchSettings();
 
@@ -214,7 +233,9 @@ const App = {
         } catch (e) {
             console.warn("Date capture failed, defaulting to now:", e);
         }
-        return new Date(); // Default to Now
+        // [CRITICAL FIX] Return null if no active view found. Defaults should be handled by consumer.
+        // Returning new Date() here forces 'today' on init, overwriting restored dates.
+        return null;
     },
 
     navigate: function (viewName, replace = false) {
@@ -222,19 +243,23 @@ const App = {
             // [SYNC] Capture date from current view before switching
             const sharedDate = this.captureCurrentDate();
 
-            // [SYNC] Propagate to Target View State
-            if (viewName === 'calendar') {
-                this.state.initialDate = sharedDate;
-            } else if (viewName === 'dept_list') {
-                // Set 1st of month for Dept View logic usually, but specific date is fine
-                this.state.deptViewDate = sharedDate;
-            } else if (viewName === 'list') {
-                // Calculate Monday of the week containing sharedDate
-                const d = new Date(sharedDate);
-                const day = d.getDay();
-                const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday
-                this.state.listViewStart = new Date(d.setDate(diff));
-                this.state.listViewWeeks = this.state.listViewWeeks || 1; // Maintain week count preference
+            // [SYNC] Propagate to Target View State IF we captured a valid date
+            // If sharedDate is null (e.g. fresh init), we keep existing state (restored from storage)
+            if (sharedDate) {
+                if (viewName === 'calendar') {
+                    this.state.initialDate = sharedDate;
+                } else if (viewName === 'dept_list') {
+                    this.state.deptViewDate = sharedDate;
+                } else if (viewName === 'list') {
+                    const d = new Date(sharedDate);
+                    const day = d.getDay();
+                    const diff = d.getDate() - day + (day === 0 ? -6 : 1); 
+                    this.state.listViewStart = new Date(d.setDate(diff));
+                    this.state.listViewWeeks = this.state.listViewWeeks || 1; // Maintain week count preference
+                }
+            } else if (!this.state.initialDate && viewName === 'calendar') {
+                 // Fallback: If absolutely no date exists, set today
+                 this.state.initialDate = new Date();
             }
 
             this.state.viewMode = viewName;
@@ -257,6 +282,29 @@ const App = {
             alert("페이지 이동 중 오류가 발생했습니다: " + err.message);
             // Fallback: Force reload if serious (optional, but let's just alert for now)
         }
+    },
+
+    refreshCurrentView: function () {
+        // [NUCLEAR OPTION] Full Reload with State
+        // Save state
+        const v = this.state.viewMode || 'calendar';
+        let d = new Date();
+        
+        try {
+             if (v === 'calendar' && this.state.calendar && typeof this.state.calendar.getDate === 'function') {
+                 d = this.state.calendar.getDate();
+             } else if (v === 'dept_list' && this.state.deptViewDate) {
+                 d = new Date(this.state.deptViewDate);
+             } else if (this.state.initialDate) {
+                 d = new Date(this.state.initialDate);
+             }
+        } catch(e) {}
+
+        sessionStorage.setItem('pogok_reload_date', d.toISOString());
+        sessionStorage.setItem('pogok_reload_view', v);
+        
+        // Force Reload
+        window.location.reload();
     },
 
     checkAuth: async function () {
@@ -414,11 +462,16 @@ const App = {
 
                 if (self.state.role === 'dept') {
                     const prefix = authUser.email.split('@')[0];
+                    self.state.myDeptIdEn = prefix; // Stable cross-year ID
                     if (!self.state.departments || self.state.departments.length === 0) {
                         self.state.departments = await self.fetchDepartments();
                     }
                     const dept = self.state.departments.find(d => d.dept_id_en === prefix);
                     self.state.myDeptId = dept ? dept.id : null;
+                    // [CRITICAL FIX] Set dept_name to user object for name-based matching
+                    if (dept && self.state.user) {
+                        self.state.user.dept_name = dept.dept_name;
+                    }
                 }
 
                 console.log(`[Auth Sync] Complete: ${authUser.email} | Role: ${self.state.role} | Status: ${self.state.status}`);
@@ -2482,7 +2535,14 @@ const App = {
         const calendarEl = document.getElementById('calendar');
         if (!calendarEl) return;
 
-        // 1. Initialize State Container
+        // 1. Safety Cleanup (Nuclear Option to ensure fresh render)
+        if (this.state.calendar) {
+            this.state.calendar.destroy();
+            this.state.calendar = null;
+        }
+        calendarEl.innerHTML = ''; // Double safety
+
+        // 2. Initialize State Container
         this.state.calendarData = {
             holidayMap: {},
             redDayMap: {},
@@ -2541,9 +2601,9 @@ const App = {
                 }
             },
             headerToolbar: {
-                left: 'customPrev,customNext today',
-                center: '', // REMOVED 'title' to prevent FullCalendar from managing it
-                right: 'extendedMonth,customDept,customList'
+                left: 'today', // Removed customPrev, customNext
+                center: '', // Managed manually
+                right: 'extendedMonth,customDept,customList' // Added view switcher to right
             },
             height: '100%', // Fill container for interior scroll on screen
             expandRows: true, // Stretch rows to fill available space (memo space)
@@ -2606,30 +2666,70 @@ const App = {
                     if (chkPrev) calEl.classList.toggle('show-prev-week', chkPrev.checked);
                     if (chkNext) calEl.classList.toggle('show-next-week', chkNext.checked);
 
-                    // Manual Title Management: Use middle date of range to identify the current month
+                    // [STABLE] Update Title and Sync Navigation Controls
                     const middleDate = new Date((info.start.getTime() + info.end.getTime()) / 2);
-                    const expectedTitle = `${middleDate.getFullYear()}년 ${middleDate.getMonth() + 1} 월`;
-                    this._expectedTitle = expectedTitle; // Update cached expectation for other logic if needed
+                    const expectedTitle = `${middleDate.getFullYear()}년 ${middleDate.getMonth() + 1}월`; 
+                    this._expectedTitle = expectedTitle; 
 
                     const toolbarEl = document.querySelector('.fc-header-toolbar');
                     if (toolbarEl) {
                         const chunks = toolbarEl.querySelectorAll('.fc-toolbar-chunk');
-                        const centerChunk = chunks[1]; // Middle chunk
+                        const centerChunk = chunks[1]; 
                         if (centerChunk) {
-                            let customTitle = centerChunk.querySelector('#custom-calendar-title');
-                            // [FIX] Ensure we create the element correctly if missing
-                            if (!customTitle) {
-                                // Clear chunk first to avoid appending to existing text-nodes
-                                centerChunk.innerHTML = '';
-                                const h2 = document.createElement('h2');
-                                h2.className = 'fc-toolbar-title';
-                                h2.id = 'custom-calendar-title';
-                                h2.style.margin = '0';
-                                centerChunk.appendChild(h2);
-                                customTitle = h2;
+                            const containerId = 'custom-title-container';
+                            let container = centerChunk.querySelector(`#${containerId}`);
+                            
+                            // Initialize once. Selective updates thereafter to prevent thrashing.
+                            if (!container) {
+                                centerChunk.innerHTML = ''; 
+                                container = document.createElement('div');
+                                container.id = containerId;
+                                container.className = 'flex items-center gap-7 font-bold text-xl text-gray-800';
+                                
+                                container.innerHTML = `
+                                    <button id="custom-nav-prev" class="w-8 h-8 bg-white border border-gray-300 rounded shadow-sm hover:bg-gray-50 text-gray-600 transition flex justify-center items-center">
+                                        <span class="material-symbols-outlined pointer-events-none">chevron_left</span>
+                                    </button>
+                                    <h2 id="custom-calendar-title" class="fc-toolbar-title mx-12" style="font-size:inherit; margin:0;"></h2>
+                                    <button id="custom-nav-next" class="w-8 h-8 bg-white border border-gray-300 rounded shadow-sm hover:bg-gray-50 text-gray-600 transition flex justify-center items-center">
+                                        <span class="material-symbols-outlined pointer-events-none">chevron_right</span>
+                                    </button>
+                                `;
+
+                                // Localized Delegation for Safety
+                                container.onclick = (e) => {
+                                    const btn = e.target.closest('button');
+                                    if (!btn) return;
+                                    
+                                    e.preventDefault();
+                                    e.stopPropagation();
+
+                                    // Time-based guard is safer than state-based for preventing freehold
+                                    const now = Date.now();
+                                    if (this._lastNavAt && (now - this._lastNavAt < 400)) return;
+                                    this._lastNavAt = now;
+
+                                    const calendar = this.state.calendar || info.view.calendar;
+                                    if (!calendar) return;
+
+                                    const current = calendar.getDate();
+                                    const y = current.getFullYear();
+                                    const m = current.getMonth();
+
+                                    // Absolute moves are idempotent and prevent double-jumps
+                                    if (btn.id === 'custom-nav-prev') {
+                                        calendar.gotoDate(new Date(y, m - 1, 1));
+                                    } else {
+                                        calendar.gotoDate(new Date(y, m + 1, 1));
+                                    }
+                                };
+                                centerChunk.appendChild(container);
                             }
-                            if (customTitle && customTitle.textContent !== expectedTitle) {
-                                customTitle.textContent = expectedTitle;
+                            
+                            // 3. Selective synchronization: Update text only
+                            const titleEl = container.querySelector('#custom-calendar-title');
+                            if (titleEl && titleEl.textContent !== expectedTitle) {
+                                titleEl.textContent = expectedTitle;
                             }
                         }
                     }
@@ -2745,6 +2845,9 @@ const App = {
             const showWeekends = localStorage.getItem('calendar-show-weekends') === 'true';
             weekendChk.checked = showWeekends;
             calendar.setOption('weekends', showWeekends);
+            
+            // [CRITICAL FIX] Store instance globally so we can capture date later
+            this.state.calendar = calendar;
 
             weekendChk.addEventListener('change', (e) => {
                 const isChecked = e.target.checked;
@@ -2985,7 +3088,7 @@ const App = {
         end.setDate(end.getDate() + (weeks * 7) - 1); // Sunday of last week
 
         // Update Range Display
-        const fmt = (d) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')} `;
+        const fmt = (d) => `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}.`;
         // [MOVED UP & FIXED] Sync Dropdowns with Hysteresis
         const selYear = document.getElementById('list-nav-year');
         const selMonth = document.getElementById('list-nav-month');
@@ -3058,7 +3161,7 @@ const App = {
 
         // Helper: Generate Page Header (Print & Screen)
         const generateHeaderHtml = (rStart, rEnd, isScreenOnly = false, isPrintOnly = false) => {
-            const rangeBase = `${fmt(rStart)} ~${fmt(rEnd)} `;
+            const rangeBase = `${fmt(rStart)} ~ ${fmt(rEnd)}`;
             const holidays = getHolidayString(rStart, rEnd);
             // rangeFull removed, we separate them now
 
@@ -3094,14 +3197,16 @@ const App = {
 
         // Update Toolbar Range
         if (rangeDisplay) {
-            rangeDisplay.innerHTML = `${fmt(start)} ~${fmt(end)} `; // Removed holiday text
+            rangeDisplay.innerHTML = `${fmt(start)} ~ ${fmt(end)}`; // Removed holiday text
         }
 
 
 
         // 2. Fetch Data
         const schedules = await this.fetchSchedules();
-        const departments = this.state.departments || [];
+        
+        // [FIX] Get departments for the TARGET academic year
+        const departments = await this.fetchDepartmentsWithFallback(targetAcademicYear);
 
         // 3. Process Days
         const dates = [];
@@ -3136,10 +3241,22 @@ const App = {
                 const overlaps = checkOverlap(sStart, sEnd, dateStr);
                 if (!overlaps) return false;
 
+                // Robust Dept identification
+                const sDeptIdKey = s.dept_id ? String(s.dept_id) : null;
+                const dept = departments.find(d => String(d.id) === sDeptIdKey) || 
+                             (this.SPECIAL_DEPTS || []).find(sd => String(sd.id) === sDeptIdKey) ||
+                             departments.find(d => d.dept_name === s.dept_name || d.dept_short === s.dept_name) ||
+                             (this.SPECIAL_DEPTS || []).find(sd => sd.name === s.dept_name || sd.short_name === s.dept_name);
+
+                const isMyDept = (this.state.role === 'dept' && this.state.myDeptIdEn && dept && 
+                                  (String(dept.dept_id_en) === String(this.state.myDeptIdEn) || String(dept.id) === String(this.state.myDeptIdEn)));
+                const isSpecial = dept && dept.id && ['admin_office', 'advanced_teacher', 'vice_principal', 'principal'].includes(dept.id);
+                const isUncategorized = !dept || (dept.dept_name === '기타');
+
                 // [DEPT SCOPING]
                 if (this.state.role === 'dept') {
-                    const isMyDept = (this.state.myDeptId && String(this.state.myDeptId) === String(s.dept_id));
-                    if (!isMyDept) return false;
+                    // Show if: it's my dept OR it's a special dept OR it has no specific dept group
+                    if (!isMyDept && !isSpecial && !isUncategorized) return false;
                 }
 
                 // [STRICT PRIVATE CHECK]
@@ -3150,10 +3267,8 @@ const App = {
                 }
 
                 // [STRICT DEPT PRIVACY]
-                // If visibility is 'dept', ONLY Admin or Member of that Dept can see it.
                 if (s.visibility === 'dept') {
                     const isAdmin = this.state.role === 'admin';
-                    const isMyDept = (this.state.role === 'dept' && this.state.myDeptId && String(this.state.myDeptId) === String(s.dept_id));
                     if (!isAdmin && !isMyDept) return false; // HIDDEN
                 }
 
@@ -3374,10 +3489,15 @@ const App = {
         const date = this.state.deptViewDate;
         const year = date.getFullYear();
         const month = date.getMonth();
+        const mm = month + 1;
+        const ay = (mm < 3) ? year - 1 : year;
+
         if (selYear) selYear.value = year;
         if (selMonth) selMonth.value = month + 1;
 
-        const activeDepts = (this.state.departments || []).filter(d => d.is_active);
+        // [FIX] Get departments for the TARGET academic year
+        const departments = await this.fetchDepartmentsWithFallback(ay);
+        const activeDepts = (departments || []).filter(d => d.is_active);
 
         // Determine Range
         const startOfMonth = new Date(year, month, 1);
@@ -3413,25 +3533,15 @@ const App = {
         thead.innerHTML = headerHtml;
 
         // 2. Data
-        const startStr = this.formatLocal(finalStart);
-        const endStr = this.formatLocal(finalEnd);
+        const schedules = await this.fetchSchedules();
 
-        let query = window.SupabaseClient.supabase
-            .from('schedules')
-            .select('*')
-            .gte('start_date', startStr)
-            .lte('start_date', endStr);
-
-        // Guest visibility filter
-        if (!this.state.user) {
-            query = query.eq('visibility', 'public');
-        }
-
-        const { data: schedules } = await query;
-
-        const mm = month + 1;
-        const ay = (mm < 3) ? year - 1 : year;
         const holidays = this.calculateMergedHolidays(ay);
+
+        const checkOverlap = (evStart, evEnd, targetDateStr) => {
+            if (evStart === targetDateStr) return true;
+            if (!evEnd) return false;
+            return (targetDateStr >= evStart && targetDateStr <= evEnd);
+        };
 
         let bodyHtml = '';
         const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
@@ -3457,21 +3567,75 @@ const App = {
             bodyHtml += `<tr class="${rowClass}">`;
             bodyHtml += `<td class="col-date">${d} <br class="print:hidden"><span class="text-[10px] print:text-inherit">(${dayNames[dayNum]})</span></td>`;
             activeDepts.forEach(dept => {
+                // [IDENTIFY COLUMN/MY DEPT] - Calculated ONCE per column
+                const myEn = this.state.myDeptIdEn ? String(this.state.myDeptIdEn).trim().toLowerCase() : null;
+                const deptEn = dept.dept_id_en ? String(dept.dept_id_en).trim().toLowerCase() : null;
+                const deptId = String(dept.id);
+                const myDbId = this.state.myDeptId ? String(this.state.myDeptId) : null;
+                
+                const normalize = (str) => str ? String(str).trim().replace(/\s+/g, '').toLowerCase() : '';
+                
+                let rawMyName = this.state.user ? this.state.user.dept_name : '';
+                // [FALLBACK] If user.dept_name missing (hot reload case), find it by ID
+                if (!rawMyName && this.state.myDeptIdEn) {
+                        const found = (departments || []).find(d => String(d.dept_id_en) === String(this.state.myDeptIdEn)) ||
+                                    (this.state.departments || []).find(d => String(d.dept_id_en) === String(this.state.myDeptIdEn));
+                        if (found) rawMyName = found.dept_name;
+                }
+
+                const myName = normalize(rawMyName);
+                const colName = normalize(dept.dept_name);
+
+                const isColMyDept = (this.state.role === 'dept' && (
+                    (myEn && deptEn && myEn === deptEn) || 
+                    (myEn && deptId === myEn) ||
+                    (myDbId && deptId === myDbId) ||
+                    (myName && colName && myName === colName) // Includes name match
+                ));
+
                 // 1. Get DB Schedules (Clone to allow injection)
-                // [FIX] 2-Step Matching: ID-based OR Name-based fallback for orphaned data
                 let deptSchedules = (schedules || []).filter(s => {
-                    if (s.start_date !== dateStr) return false;
+                    let sStart = s.start_date;
+                    let sEnd = s.end_date || s.start_date;
+                    if (sStart.includes('T')) sStart = sStart.split('T')[0];
+                    if (sEnd.includes('T')) sEnd = sEnd.split('T')[0];
+
+                    if (!checkOverlap(sStart, sEnd, dateStr)) return false;
+                    
+                    const sDeptId = s.dept_id ? String(s.dept_id) : null;
+                    const sDeptName = s.dept_name;
+                    
+                    const matchById = sDeptId && sDeptId === String(dept.id);
+                    const matchByName = sDeptName === dept.dept_name || sDeptName === dept.dept_short;
+                    
+                    // [FORCE MATCH - AUTHOR]
+                    // If I created this schedule, and this column IS my dept column, force show it here.
+                    // This handles cases where ID changed and Name has typo/mismatch.
+                    const isAuthor = this.state.user && s.user_id && String(s.user_id) === String(this.state.user.id);
+                    const forceMatch = isColMyDept && isAuthor;
+
+                    const isMatch = matchById || matchByName || forceMatch;
+                    
+                    if (!isMatch) return false;
 
                     // [STRICT DEPT PRIVACY]
+                    // If visibility is 'dept', ONLY Admin or Member of that Dept can see it.
                     if (s.visibility === 'dept') {
                         const isAdmin = this.state.role === 'admin';
-                        const isMyDept = (this.state.role === 'dept' && this.state.myDeptId && String(this.state.myDeptId) === String(s.dept_id));
-                        if (!isAdmin && !isMyDept) return false;
+                        // If it matches THIS column, and THIS column is my dept, then I have access.
+                        // Or if I am explicitly part of the schedule's dept (handled by isColMyDept since we only show matched)
+                        if (!isAdmin && !isColMyDept) return false;
+                    }
+                    
+                    // [GUEST/STAFF VISIBILITY]
+                    if (!this.state.user && s.visibility !== 'public') return false;
+                    if (s.visibility === 'private') {
+                        const isAdmin = this.state.role === 'admin';
+                        const isCreator = this.state.user && s.user_id && String(s.user_id) === String(this.state.user.id);
+                        if (!isAdmin && !isCreator) return false;
                     }
 
-                    if (s.dept_id) return String(s.dept_id) == String(dept.id);
-                    // Fallback: match by name if ID is missing
-                    return s.dept_name === dept.dept_name || s.dept_name === dept.dept_short;
+                    return true;
                 });
                 // Create a mutable copy if filter returns a new array anyway, but let's be explicit we treat it as mutable list
                 deptSchedules = [...deptSchedules];
@@ -3512,7 +3676,9 @@ const App = {
                 // So we just skip adding `deptSchedules` to HTML if it's not my dept.
 
                 const isDeptUser = this.state.role === 'dept';
-                const isMyDept = isDeptUser ? (String(dept.id) === String(this.state.myDeptId)) : true; // Admin/Teacher sees all
+                // [CRITICAL FIX] Use the robust 'isColMyDept' check we calculated earlier (which includes Name/ID fallback)
+                // instead of the naive ID check which fails on year mismatch.
+                const isMyDept = isDeptUser ? isColMyDept : true; // Admin/Teacher sees all
 
                 // IMPORTANT: Virtual events (Kyomu Holidays, Science Env) should probably be visible to everyone?
                 // The user said "Basic School Schedule, Holidays/Events" should be visible.
@@ -3867,22 +4033,6 @@ const App = {
                 }
 
                 const deptIdKey = s.dept_id ? String(s.dept_id) : null;
-
-                // [STRICT DEPT SCOPING]
-                // For users with 'dept' role, ONLY show schedules belonging to their department.
-                // This applies to ALL visibility levels (internal, public, etc) for this role.
-                if (this.state.role === 'dept') {
-                    const isMyDept = (this.state.myDeptId && String(this.state.myDeptId) === deptIdKey);
-                    if (!isMyDept) return; // HIDDEN
-                }
-
-                // [STRICT DEPT PRIVACY]
-                // If visibility is 'dept', ONLY Admin or Member of that Dept can see it.
-                if (s.visibility === 'dept') {
-                    const isAdmin = this.state.role === 'admin';
-                    const isMyDept = (this.state.role === 'dept' && this.state.myDeptId && String(this.state.myDeptId) === deptIdKey);
-                    if (!isAdmin && !isMyDept) return; // HIDDEN
-                }
                 const deptNameKey = s.dept_name;
 
                 // 2-Step Mapping: 1. By ID, 2. By Name (Fallback for orphaned data)
@@ -3899,6 +4049,27 @@ const App = {
 
                 // Final Fallback
                 if (!dept) dept = { dept_name: '기타', dept_color: '#333' };
+
+                // [IDENTIFY MY DEPT] Cross-year stable check
+                const isMyDept = (this.state.role === 'dept' && this.state.myDeptIdEn && 
+                                  (String(dept.dept_id_en) === String(this.state.myDeptIdEn) || String(dept.id) === String(this.state.myDeptIdEn)));
+                const isSpecial = dept && dept.id && ['admin_office', 'advanced_teacher', 'vice_principal', 'principal'].includes(dept.id);
+                const isUncategorized = !dept || (dept.dept_name === '기타');
+
+                // [STRICT DEPT SCOPING]
+                // For users with 'dept' role, ONLY show schedules belonging to their department.
+                // This applies to ALL visibility levels (internal, public, etc) for this role.
+                if (this.state.role === 'dept') {
+                    // Show if: it's my dept OR it's a special dept OR it has no specific dept group
+                    if (!isMyDept && !isSpecial && !isUncategorized) return;
+                }
+
+                // [STRICT DEPT PRIVACY]
+                // If visibility is 'dept', ONLY Admin or Member of that Dept can see it.
+                if (s.visibility === 'dept') {
+                    const isAdmin = this.state.role === 'admin';
+                    if (!isAdmin && !isMyDept) return; // HIDDEN
+                }
 
                 const finalDeptId = dept.id ? String(dept.id) : 'uncategorized';
                 events.push({
@@ -4009,9 +4180,22 @@ const App = {
         const rUntil = document.getElementById('sched-until');
 
         // 4. Populate Departments (Filtered by Role)
-        let filteredDepts = this.state.departments;
-        if (this.state.role === 'dept' && this.state.myDeptId) {
-            filteredDepts = this.state.departments.filter(d => String(d.id) === String(this.state.myDeptId));
+        let filteredDepts = this.state.departments || [];
+
+        // Fallback: If current state departments are empty, try fallback fetch
+        if (filteredDepts.length === 0) {
+            filteredDepts = await this.fetchDepartmentsWithFallback();
+        }
+
+        if (this.state.role === 'dept' && (this.state.myDeptId || this.state.myDeptIdEn)) {
+            // Filter by stable English ID (cross-year compatible)
+            const myEnId = this.state.myDeptIdEn;
+            filteredDepts = filteredDepts.filter(d => String(d.dept_id_en) === String(myEnId));
+            
+            // If still empty by English ID, fallback to database ID if it matches this year's departments
+            if (filteredDepts.length === 0 && this.state.myDeptId) {
+                filteredDepts = (this.state.departments || []).filter(d => String(d.id) === String(this.state.myDeptId));
+            }
         }
 
         deptSelect.innerHTML = filteredDepts.map(d =>
@@ -4019,8 +4203,8 @@ const App = {
         ).join('');
 
         // [DEPT ROLE] Set default or locked state
-        if (this.state.role === 'dept' && this.state.myDeptId) {
-            deptSelect.value = this.state.myDeptId;
+        if (this.state.role === 'dept' && filteredDepts.length > 0) {
+            deptSelect.value = filteredDepts[0].id;
             // Default Visibility to 'dept' for NEW schedules, but allow change
             if (!eventId) visSelect.value = 'dept';
         }
@@ -4101,18 +4285,23 @@ const App = {
         visSelect.onchange();
 
         btnDelete.onclick = async () => {
+            const sid = document.getElementById('schedule-id').value;
+            if (!sid) return;
+
             if (confirm('정말 삭제하시겠습니까?')) {
                 const { error } = await window.SupabaseClient.supabase
                     .from('schedules')
                     .delete()
-                    .eq('id', document.getElementById('schedule-id').value);
+                    .eq('id', parseInt(sid));
 
                 if (error) {
                     alert('삭제 실패: ' + error.message);
                 } else {
-                    this.logAction('DELETE', 'schedules', document.getElementById('schedule-id').value, { title: titleInput.value });
+                    this.logAction('DELETE', 'schedules', parseInt(sid), { title: titleInput.value });
+                    
                     this.closeModal();
-                    this.initCalendar();
+                    // [Race Condition Fix] Delay refresh aggressively (500ms)
+                    setTimeout(() => this.refreshCurrentView(), 500);
                 }
             }
         };
@@ -4194,28 +4383,46 @@ const App = {
                 });
             }
 
-            let result;
-            if (scheduleId) {
-                // UPDATE (Single)
-                result = await window.SupabaseClient.supabase
-                    .from('schedules')
-                    .update(batchData[0])
-                    .eq('id', scheduleId)
-                    .select();
-            } else {
-                // INSERT (Maybe Batch)
-                result = await window.SupabaseClient.supabase
-                    .from('schedules')
-                    .insert(batchData)
-                    .select();
-            }
+            try {
+                let result;
+                if (scheduleId) {
+                    // UPDATE (Single)
+                    const updatePayload = { ...batchData[0] };
+                    delete updatePayload.id; // Safety: never update unique ID
+                    delete updatePayload.created_at; // Safety
 
-            if (result.error) {
-                console.error(result.error);
-                alert('저장 실패: ' + result.error.message);
-                btnSave.disabled = false;
-                btnSave.textContent = '저장';
-            } else {
+                    // [FIX] Convert empty dept_id to null for bigint compatibility
+                    if (updatePayload.dept_id === "") updatePayload.dept_id = null;
+                    if (updatePayload.dept_id) updatePayload.dept_id = parseInt(updatePayload.dept_id);
+
+                    result = await window.SupabaseClient.supabase
+                        .from('schedules')
+                        .update(updatePayload)
+                        .eq('id', parseInt(scheduleId))
+                        .select();
+                } else {
+                    // INSERT (Maybe Batch)
+                    // [FIX] Sanitization for bigint dept_id
+                    const sanitizedBatch = batchData.map(d => {
+                        const copy = { ...d };
+                        if (copy.dept_id === "") copy.dept_id = null;
+                        if (copy.dept_id) copy.dept_id = parseInt(copy.dept_id);
+                        return copy;
+                    });
+
+                    result = await window.SupabaseClient.supabase
+                        .from('schedules')
+                        .insert(sanitizedBatch)
+                        .select();
+                }
+
+                if (result.error) throw result.error;
+                
+                // [RLS CHECK] If data is empty, it means RLS blocked the write or ID not found
+                if (!result.data || result.data.length === 0) {
+                    throw new Error('데이터가 저장되지 않았습니다. 수정 권한이 없거나 삭제된 일정일 수 있습니다.');
+                }
+
                 const action = scheduleId ? 'UPDATE' : 'INSERT';
                 // Log only first ID or special bulk log
                 if (batchData.length > 1) {
@@ -4226,7 +4433,14 @@ const App = {
                 }
 
                 this.closeModal();
-                this.initCalendar();
+                // [Race Condition Fix] Delay refresh aggressively (500ms) to ensure DB commit is visible
+                setTimeout(() => this.refreshCurrentView(), 500);
+
+            } catch (err) {
+                console.error("Save Error:", err);
+                alert('저장 실패: ' + (err.message || '알 수 없는 오류'));
+                btnSave.disabled = false;
+                btnSave.textContent = '저장';
             }
         };
     },
