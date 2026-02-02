@@ -5962,7 +5962,10 @@ const App = {
 
             const rect = mainContent.getBoundingClientRect();
             const availableTotal = windowHeight - rect.top;
-            const safetyMargin = 10;
+            
+            // [FIX] Increase safety margin for mobile to prevent cutoff in Samsung Browser etc.
+            const isMobile = window.innerWidth <= 768;
+            const safetyMargin = isMobile ? 35 : 10;
 
             // Measure overheads
             const toolbar = document.querySelector('.fc-header-toolbar');

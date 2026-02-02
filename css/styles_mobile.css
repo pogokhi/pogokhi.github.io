@@ -6,7 +6,7 @@
 /* 1. Hide Print Feature on Mobile/Tablet */
 /* Only hide when a coarse pointer (touchscreen) is detected, regardless of width. 
    This ensures PC users can see the print button even in small windows. */
-@media (pointer: coarse) {
+@media (pointer: coarse), screen and (max-width: 768px) {
     #btn-print-modal, 
     #btn-print-direct, 
     #btn-dept-print, 
@@ -125,6 +125,7 @@
     }
 
     /* Hide the original container hole ONLY in the view, not the header */
+    /* [REMOVED] This CSS was causing buttons to 'float' by collapsing their parent.
     #view-container div:has(> #btn-dept-calendar), 
     #view-container div:has(> #btn-list-calendar) {
         width: 0 !important;
@@ -132,7 +133,7 @@
         padding: 0 !important;
         margin: 0 !important;
         overflow: visible !important;
-    }
+    } */
 
     /* 3. Dept List View Optimization */
     #dept-view-content-wrapper {
