@@ -140,10 +140,19 @@ const App = {
                 throw new Error("Supabase Client JS 파일이 로드되지 않았습니다.");
             }
 
-            // 2. Check Auth State
-            await this.checkAuth();
+            // 2. Load Initial Settings (Important for academic year)
+            const settings = await this.fetchSettings();
+            if (settings && settings.academic_year) {
+                this.state.currentYear = settings.academic_year;
+                this.state.currentSettings = settings;
+                console.log("[Init] Academic Year set to:", this.state.currentYear);
+            } else {
+                console.warn("[Init] No settings found. Redirecting to login/init.");
+                this.loadView('login');
+                return;
+            }
 
-            // 2. Check Auth State
+            // 3. Check Auth State (Now with correct currentYear)
             await this.checkAuth();
 
             // [RESTORE STATE] Check if we just reloaded
@@ -155,59 +164,37 @@ const App = {
                 console.log("[Init] Restored Date:", this.state.initialDate);
             }
             if (savedView) {
-                // If view logic supports explicit initial view, we can use it, 
-                // but usually URL hash or default handles it.
-                // We just rely on state here.
                 this.state.viewMode = savedView;
                 sessionStorage.removeItem('pogok_reload_view');
             }
 
-            // 2.5 Load Initial Settings (for Dynamic Title etc)
-            const settings = await this.fetchSettings();
+            // 4. Routing & History Setup
 
-
-            // Check if settings exist (fresh project check)
-            if (!settings.academic_year) {
-                alert("학년도를 설정한 후 이용할 수 있습니다. 관리자로 접속하여 학년도를 설정해주세요.");
-                this.loadView('login');
-                return;
-            }
-
-            // 3. Routing & History Setup
             window.addEventListener('popstate', (event) => {
-                // Handle Back/Forward Button
                 const viewName = event.state?.view || 'calendar';
-                // Update internal state directly to avoid recursion or double-pushing
                 this.state.viewMode = viewName;
                 localStorage.setItem('pogok_last_view', viewName);
                 this.loadView(viewName);
             });
 
-            // 4. Load Initial View
-            // Force 'calendar' on root load (ignore localStorage to prevent auto-redirect to dept_list etc for guests)
+            // 5. Load Initial View
             let initialView = 'calendar';
-
             if (window.location.hash) {
                 const hashView = window.location.hash.substring(1);
-                // Allow dept_list explicitly in hash handling
-                if (['calendar', 'login', 'admin', 'dept_list'].includes(hashView)) {
+                if (['calendar', 'login', 'admin', 'dept_list', 'list'].includes(hashView)) {
                     initialView = hashView;
                 }
             }
-
-            // Replace current state (initial load) - Keep URL clean
-            // If we loaded from a hash, we consume it and clean the URL
             history.replaceState({ view: initialView }, '', window.location.pathname);
-            this.navigate(initialView, true); // true = replace (don't push again)
+            this.navigate(initialView, true);
 
             console.log("PogokLink Ready.");
         } catch (error) {
             console.error("Initialization Failed:", error);
             alert("시스템 초기화 중 오류가 발생했습니다: " + error.message);
         } finally {
-            // 5. Remove Loader (Always run)
-            document.getElementById('loading-spinner').classList.add('hidden');
-            document.getElementById('view-container').classList.remove('hidden');
+            document.getElementById('loading-spinner')?.classList.add('hidden');
+            document.getElementById('view-container')?.classList.remove('hidden');
         }
     },
 
@@ -3822,8 +3809,16 @@ const App = {
         const events = [];
 
         // --- 1. Admin Event Deduplication Setup ---
-        // We track all titles from Admin settings to skip duplicate DB schedules later.
-        const normalize = (s) => (s || '').normalize('NFC').replace(/[\s\(\)\[\]\{\}\-\.~!@#$%^&*_=+|;:'",.<>?/]/g, '').toLowerCase();
+        // [PERFORMANCE] Optimize normalization with a local cache
+        if (!this._normCache) this._normCache = new Map();
+        const normalize = (s) => {
+            if (!s) return '';
+            let cached = this._normCache.get(s);
+            if (cached) return cached;
+            const res = s.normalize('NFC').replace(/[\s\(\)\[\]\{\}\-\.~!@#$%^&*_=+|;:'",.<>?/]/g, '').toLowerCase();
+            this._normCache.set(s, res);
+            return res;
+        };
         const adminEventMap = {}; // { 'YYYY-MM-DD': Set(normalizedTitles) }
 
         const addAdminRef = (date, name) => {
@@ -3961,7 +3956,12 @@ const App = {
                 const hasDbData = basicSchedules.some(item => parseInt(item.academic_year) === ay);
                 if (hasDbData) return;
 
-                const holidays = this.calculateMergedHolidays(ay);
+                // [PERFORMANCE] Cache holiday calculations
+                if (!this.state._holidayCache) this.state._holidayCache = {};
+                if (!this.state._holidayCache[ay]) {
+                    this.state._holidayCache[ay] = this.calculateMergedHolidays(ay);
+                }
+                const holidays = this.state._holidayCache[ay];
                 Object.entries(holidays).forEach(([dateStr, name]) => {
                     const names = name.split(", ");
                     names.forEach(n => {
@@ -4384,6 +4384,9 @@ const App = {
             }
 
             try {
+                console.log("[Save] Starting save operation. isRecurring:", isRecurring, "scheduleId:", scheduleId);
+                console.log("[Save] Payload Preview:", batchData[0]);
+
                 let result;
                 if (scheduleId) {
                     // UPDATE (Single)
@@ -4393,33 +4396,58 @@ const App = {
 
                     // [FIX] Convert empty dept_id to null for bigint compatibility
                     if (updatePayload.dept_id === "") updatePayload.dept_id = null;
-                    if (updatePayload.dept_id) updatePayload.dept_id = parseInt(updatePayload.dept_id);
+                    if (updatePayload.dept_id !== undefined && updatePayload.dept_id !== null) {
+                        updatePayload.dept_id = parseInt(updatePayload.dept_id);
+                    }
 
-                    result = await window.SupabaseClient.supabase
+                    console.log("[Save] Executing Update...");
+                    const updatePromise = window.SupabaseClient.supabase
                         .from('schedules')
                         .update(updatePayload)
                         .eq('id', parseInt(scheduleId))
                         .select();
+                    
+                    const timeoutPromiseUpdate = new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('서버 응답 시간이 초과되었습니다. 네트워크 상태를 확인하거나 잠시 후 다시 시도해주세요.')), 15000)
+                    );
+
+                    result = await Promise.race([updatePromise, timeoutPromiseUpdate]);
                 } else {
                     // INSERT (Maybe Batch)
                     // [FIX] Sanitization for bigint dept_id
                     const sanitizedBatch = batchData.map(d => {
                         const copy = { ...d };
                         if (copy.dept_id === "") copy.dept_id = null;
-                        if (copy.dept_id) copy.dept_id = parseInt(copy.dept_id);
+                        if (copy.dept_id !== undefined && copy.dept_id !== null) {
+                            copy.dept_id = parseInt(copy.dept_id);
+                        }
                         return copy;
                     });
 
-                    result = await window.SupabaseClient.supabase
+                    console.log("[Save] Executing Insert with batch size:", sanitizedBatch.length);
+                    // [Safety] Add a race condition/timeout guard
+                    const savePromise = window.SupabaseClient.supabase
                         .from('schedules')
                         .insert(sanitizedBatch)
                         .select();
+                    
+                    const timeoutPromise = new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('서버 응답 시간이 초과되었습니다. 네트워크 상태를 확인하거나 잠시 후 다시 시도해주세요.')), 15000)
+                    );
+
+                    result = await Promise.race([savePromise, timeoutPromise]);
                 }
 
-                if (result.error) throw result.error;
+                console.log("[Save] Supabase Response Received:", result);
+
+                if (result.error) {
+                    console.error("[Save] Supabase Error:", result.error);
+                    throw result.error;
+                }
                 
                 // [RLS CHECK] If data is empty, it means RLS blocked the write or ID not found
                 if (!result.data || result.data.length === 0) {
+                    console.warn("[Save] RLS Warning: No data returned from select()");
                     throw new Error('데이터가 저장되지 않았습니다. 수정 권한이 없거나 삭제된 일정일 수 있습니다.');
                 }
 
@@ -4429,12 +4457,17 @@ const App = {
                     this.logAction('RECUR_INSERT', 'schedules', null, { count: batchData.length, title: baseData.title });
                 } else {
                     const id = scheduleId || result.data[0].id;
+                    console.log("[Save] Logging action for ID:", id);
                     this.logAction(action, 'schedules', id, { title: baseData.title, dept: baseData.dept_id });
                 }
 
+                console.log("[Save] Closing Modal and refreshing view...");
                 this.closeModal();
                 // [Race Condition Fix] Delay refresh aggressively (500ms) to ensure DB commit is visible
-                setTimeout(() => this.refreshCurrentView(), 500);
+                setTimeout(() => {
+                    console.log("[Save] Refreshing view now.");
+                    this.refreshCurrentView();
+                }, 500);
 
             } catch (err) {
                 console.error("Save Error:", err);
@@ -5536,6 +5569,28 @@ const App = {
         const allDepartments = this.state.cache.departments;
         const schedules = this.state.cache.schedules;
 
+        const infoStartStr = this.formatLocal(start);
+        const infoEndStr = this.formatLocal(end);
+
+        // [PERFORMANCE] Filter schedules and basic schedules by date range
+        // Add a small buffer (e.g., 7 days) to ensure multi-day events are captured correctly at boundaries
+        const rangeStart = this.formatLocal(new Date(start.getTime() - 7 * 86400000));
+        const rangeEnd = this.formatLocal(new Date(end.getTime() + 7 * 86400000));
+
+        const filteredSchedules = schedules.filter(s => {
+            const sStart = s.start_date;
+            const sEnd = s.end_date || s.start_date;
+            return sStart <= rangeEnd && sEnd >= rangeStart;
+        });
+
+        const filteredBasicSchedules = allBasicSchedules.filter(s => {
+            const sStart = s.start_date;
+            const sEnd = s.end_date || s.start_date;
+            return sStart <= rangeEnd && sEnd >= rangeStart;
+        });
+
+        const allEvents = this.transformEvents(filteredSchedules, {}, allDepartments, filteredBasicSchedules);
+
         // [SEARCH] Identify "Active" Academic Year for Scoping
         const midDate = new Date(start.getTime() + (end.getTime() - start.getTime()) / 2);
         const mm = midDate.getMonth() + 1;
@@ -5559,8 +5614,6 @@ const App = {
             backgroundEvents: [],
             departments: allDepartments
         };
-
-        const allEvents = this.transformEvents(schedules, {}, allDepartments, allBasicSchedules);
 
         allEvents.forEach(e => {
             const dateKey = e.start;
@@ -5621,6 +5674,13 @@ const App = {
                 }
             }
         });
+
+        // [PERFORMANCE] Pre-calculate department order map for sorting in renderCalendarCell
+        const deptOrderMap = {};
+        allDepartments.forEach((d, idx) => {
+            deptOrderMap[String(d.id)] = idx;
+        });
+        data.deptOrderMap = deptOrderMap;
 
         this.state.calendarData = data;
         this.state.calendar.setOption('events', data.backgroundEvents);
@@ -5770,8 +5830,8 @@ const App = {
         if (data.scheduleMap[dateStr]) {
             const groups = data.scheduleMap[dateStr];
             const sortedDeptIds = Object.keys(groups).sort((a, b) => {
-                const idxA = (data.departments || []).findIndex(d => d.id == a);
-                const idxB = (data.departments || []).findIndex(d => d.id == b);
+                const idxA = data.deptOrderMap[String(a)] ?? 999;
+                const idxB = data.deptOrderMap[String(b)] ?? 999;
                 return idxA - idxB;
             });
 
