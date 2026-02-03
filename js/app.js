@@ -2789,13 +2789,22 @@ const App = {
                     };
                 }
 
-                // Remove default FullCalendar containers that might cause whitespace or layout issues
-                const eventsContainer = arg.el.querySelector('.fc-daygrid-day-events');
-                // const bottomContainer = arg.el.querySelector('.fc-daygrid-day-bottom'); // KEEP: Used for spacing
-                const topContainer = arg.el.querySelector('.fc-daygrid-day-top'); // Original date header
-                if (eventsContainer) eventsContainer.remove();
-                // if (bottomContainer) bottomContainer.remove();
+                // Removed redundant backgrounds from topContainer and eventsContainer to prevent doubling
                 if (topContainer) topContainer.remove();
+                if (eventsContainer) eventsContainer.remove();
+
+                // [BORDRE FIX] Apply background color to the actual cell (td) instead of the inner container.
+                // This ensures the background logic doesn't interfere with the table's own border rendering.
+                dateStr = this.formatLocal(arg.date);
+                const data = this.state.calendarData || { bgColorMap: {} };
+                
+                let cellBgColor = '#ffffff';
+                if (arg.isToday) {
+                    cellBgColor = 'var(--fc-today-bg-color)';
+                } else if (!arg.isOther && data.bgColorMap && data.bgColorMap[dateStr]) {
+                    cellBgColor = data.bgColorMap[dateStr];
+                }
+                arg.el.style.backgroundColor = cellBgColor;
             },
 
             windowResize: (view) => {
@@ -5697,13 +5706,8 @@ const App = {
         container.style.height = "100%";
         // CLICK HANDLER MOVED TO dayCellDidMount (td-level)
 
-        // MASKING: Ensure the whole cell is opaque white (or today color) to hide FullCalendar background events
-        // This reinforces the "color restricted to header" rule.
-        if (arg.isToday) {
-            container.style.backgroundColor = 'var(--fc-today-bg-color)';
-        } else {
-            container.style.backgroundColor = '#ffffff';
-        }
+        // MASKING: Background color now managed at the td-level in dayCellDidMount
+        // to prevent content from overlapping the cell borders during scroll transforms.
 
         // Group header and divider to apply background color up to the divider line
         const headerGroup = document.createElement('div');
@@ -5716,6 +5720,9 @@ const App = {
         headerGroup.style.position = 'sticky';
         headerGroup.style.top = '0';
         headerGroup.style.zIndex = '10';
+        // GPU ACCELERATION: Force compositor layer to prevent border flickering during transforms
+        headerGroup.style.transform = 'translateZ(0)';
+        headerGroup.style.backfaceVisibility = 'hidden';
 
         // Ensure a solid background even if not a holiday, so schedule text hides behind it
         let cellBgColor = '#ffffff';
