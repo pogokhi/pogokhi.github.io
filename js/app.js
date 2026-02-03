@@ -994,7 +994,7 @@ const App = {
                     'School': '학교'
                 };
                 const val = revMap[enLevelSelect.value];
-                if (val) krLevelSelect.value = val;
+                if (val) enLevelSelect.value = val;
             });
         }
 
@@ -1351,10 +1351,6 @@ const App = {
                         // If we find them in DB, we should separate them.
                         // But wait, the SAVE logic dumped calc'd holidays into DB too.
                         // So on LOAD, we should probably distinct them.
-                        // Simple strategy: Just put everything in "Variable" container for now? 
-                        // User wants to see "Fixed" separately usually.
-                        // Let's rely on standard Calc for "Fixed" and filtered DB rows for "Variable" if possible?
-                        // But we SAVED everything.
                         // Let's filter: if date matches result of 'calculateMergedHolidays', put in Fixed, else Variable.
                         const fixedRef = this.calculateMergedHolidays(targetY);
                         // We need simple check.
@@ -1387,9 +1383,8 @@ const App = {
         this.renderFixedHolidays(this.currentFixedHolidays);
 
         // 2. Identify Variables (In DB but not in Standard)
-        const variableRows = schedules.filter(r => r.type === 'holiday');
         const ayStart = `${targetY}-03-01`;
-        const ayEnd = `${parseInt(targetY) + 1}-02 - 29`;
+        const ayEnd = `${parseInt(targetY) + 1}-02-29`;
 
         variableRows.forEach(r => {
             // Range check: Only items belonging to THIS academic year calendar (Mar to Feb)
@@ -2639,6 +2634,8 @@ const App = {
 
             // Dynamic Fetching on View Change
             datesSet: async (info) => {
+                if (this._isRefreshing) return;
+
                 const calEl = document.getElementById('calendar');
                 if (calEl) {
                     const rows = Array.from(calEl.querySelectorAll('.fc-daygrid-body table tr'));
@@ -2652,77 +2649,74 @@ const App = {
                     const chkNext = document.getElementById('chk-add-next-week');
                     if (chkPrev) calEl.classList.toggle('show-prev-week', chkPrev.checked);
                     if (chkNext) calEl.classList.toggle('show-next-week', chkNext.checked);
-
-                    // [STABLE] Update Title and Sync Navigation Controls
-                    const middleDate = new Date((info.start.getTime() + info.end.getTime()) / 2);
-                    const expectedTitle = `${middleDate.getFullYear()}년 ${middleDate.getMonth() + 1}월`; 
-                    this._expectedTitle = expectedTitle; 
-
-                    const toolbarEl = document.querySelector('.fc-header-toolbar');
-                    if (toolbarEl) {
-                        const chunks = toolbarEl.querySelectorAll('.fc-toolbar-chunk');
-                        const centerChunk = chunks[1]; 
-                        if (centerChunk) {
-                            const containerId = 'custom-title-container';
-                            let container = centerChunk.querySelector(`#${containerId}`);
-                            
-                            // Initialize once. Selective updates thereafter to prevent thrashing.
-                            if (!container) {
-                                centerChunk.innerHTML = ''; 
-                                container = document.createElement('div');
-                                container.id = containerId;
-                                container.className = 'flex items-center gap-7 font-bold text-xl text-gray-800';
-                                
-                                container.innerHTML = `
-                                    <button id="custom-nav-prev" class="w-8 h-8 bg-white border border-gray-300 rounded shadow-sm hover:bg-gray-50 text-gray-600 transition flex justify-center items-center">
-                                        <span class="material-symbols-outlined pointer-events-none">chevron_left</span>
-                                    </button>
-                                    <h2 id="custom-calendar-title" class="fc-toolbar-title mx-12" style="font-size:inherit; margin:0;"></h2>
-                                    <button id="custom-nav-next" class="w-8 h-8 bg-white border border-gray-300 rounded shadow-sm hover:bg-gray-50 text-gray-600 transition flex justify-center items-center">
-                                        <span class="material-symbols-outlined pointer-events-none">chevron_right</span>
-                                    </button>
-                                `;
-
-                                // Localized Delegation for Safety
-                                container.onclick = (e) => {
-                                    const btn = e.target.closest('button');
-                                    if (!btn) return;
-                                    
-                                    e.preventDefault();
-                                    e.stopPropagation();
-
-                                    // Time-based guard is safer than state-based for preventing freehold
-                                    const now = Date.now();
-                                    if (this._lastNavAt && (now - this._lastNavAt < 400)) return;
-                                    this._lastNavAt = now;
-
-                                    const calendar = this.state.calendar || info.view.calendar;
-                                    if (!calendar) return;
-
-                                    const current = calendar.getDate();
-                                    const y = current.getFullYear();
-                                    const m = current.getMonth();
-
-                                    // Absolute moves are idempotent and prevent double-jumps
-                                    if (btn.id === 'custom-nav-prev') {
-                                        calendar.gotoDate(new Date(y, m - 1, 1));
-                                    } else {
-                                        calendar.gotoDate(new Date(y, m + 1, 1));
-                                    }
-                                };
-                                centerChunk.appendChild(container);
-                            }
-                            
-                            // 3. Selective synchronization: Update text only
-                            const titleEl = container.querySelector('#custom-calendar-title');
-                            if (titleEl && titleEl.textContent !== expectedTitle) {
-                                titleEl.textContent = expectedTitle;
-                            }
-                        }
-                    }
                 }
 
-                await this.refreshCalendarData(info.start, info.end);
+                // [STABLE] Update Title and Sync Navigation Controls
+                const middleDate = new Date((info.start.getTime() + info.end.getTime()) / 2);
+                const expectedTitle = `${middleDate.getFullYear()}년 ${middleDate.getMonth() + 1}월`; 
+                this._expectedTitle = expectedTitle; 
+
+                const toolbarEl = document.querySelector('.fc-header-toolbar');
+                if (toolbarEl) {
+                    const chunks = toolbarEl.querySelectorAll('.fc-toolbar-chunk');
+                    const centerChunk = chunks[1]; 
+                    if (centerChunk) {
+                        const containerId = 'custom-title-container';
+                        let container = centerChunk.querySelector(`#${containerId}`);
+                        
+                        // Initialize once. Selective updates thereafter to prevent thrashing.
+                        if (!container) {
+                            centerChunk.innerHTML = ''; 
+                            container = document.createElement('div');
+                            container.id = containerId;
+                            container.className = 'flex items-center gap-7 font-bold text-xl text-gray-800';
+                            
+                            container.innerHTML = `
+                                <button id="custom-nav-prev" class="w-8 h-8 bg-white border border-gray-300 rounded shadow-sm hover:bg-gray-50 text-gray-600 transition flex justify-center items-center">
+                                    <span class="material-symbols-outlined pointer-events-none">chevron_left</span>
+                                </button>
+                                <h2 id="custom-calendar-title" class="fc-toolbar-title mx-12" style="font-size:inherit; margin:0;"></h2>
+                                <button id="custom-nav-next" class="w-8 h-8 bg-white border border-gray-300 rounded shadow-sm hover:bg-gray-50 text-gray-600 transition flex justify-center items-center">
+                                    <span class="material-symbols-outlined pointer-events-none">chevron_right</span>
+                                </button>
+                            `;
+
+                            // Localized Delegation for Safety
+                            container.onclick = (e) => {
+                                const btn = e.target.closest('button');
+                                if (!btn) return;
+                                
+                                e.preventDefault();
+                                e.stopPropagation();
+
+                                // Time-based guard is safer than state-based for preventing freehold
+                                const now = Date.now();
+                                if (this._lastNavAt && (now - this._lastNavAt < 400)) return;
+                                this._lastNavAt = now;
+
+                                const calendar = this.state.calendar || info.view.calendar;
+                                if (!calendar) return;
+
+                                const current = calendar.getDate();
+                                const y = current.getFullYear();
+                                const m = current.getMonth();
+
+                                // Absolute moves are idempotent and prevent double-jumps
+                                if (btn.id === 'custom-nav-prev') {
+                                    calendar.gotoDate(new Date(y, m - 1, 1));
+                                } else {
+                                    calendar.gotoDate(new Date(y, m + 1, 1));
+                                }
+                            };
+                            centerChunk.appendChild(container);
+                            const titleEl = container.querySelector('#custom-calendar-title');
+                            if (titleEl) titleEl.textContent = expectedTitle;
+                        }
+                        // Update title even if container already exists
+                        const titleEl = container.querySelector('#custom-calendar-title');
+                        if (titleEl) titleEl.textContent = expectedTitle;
+                    }
+                }
 
                 this.distributeVerticalSpace();
 
@@ -2733,6 +2727,8 @@ const App = {
                     window.scrollTo(0, 0);
                     document.querySelectorAll('.fc-scroller').forEach(el => el.scrollTop = 0);
                 });
+
+                await this.refreshCalendarData(info.start, info.end);
             },
 
             // Custom Classes for Red Dates
@@ -2765,6 +2761,15 @@ const App = {
                 // 3. Weekends (Sunday=0, Saturday=6)
                 else if (day === 0 || day === 6) classes.push('is-holiday');
 
+                // 4. Background Colors (CSS Classes for reactivity)
+                if (data.bgColorMap && data.bgColorMap[dateStr]) {
+                    const color = data.bgColorMap[dateStr];
+                    if (color === '#fef2f2') classes.push('is-holiday');
+                    else if (color === '#fffcfc') classes.push('is-vacation');
+                    else if (color === '#fff7ed') classes.push('is-exam');
+                    else if (color === '#eff6ff') classes.push('is-major');
+                }
+
                 return classes;
             },
 
@@ -2795,16 +2800,14 @@ const App = {
                 if (eventsContainer) eventsContainer.remove();
                 if (topContainer) topContainer.remove();
 
-                // [BORDRE FIX] Apply background color to the actual cell (td) instead of the inner container.
-                const data = this.state.calendarData || { bgColorMap: {} };
+                // [BORDRE FIX] Note: Background color is now managed via CSS classes in dayCellClassNames 
+                // for better reactivity across month navigations and FullCalendar re-renders.
                 
-                let cellBgColor = '#ffffff';
                 if (arg.isToday) {
-                    cellBgColor = 'var(--fc-today-bg-color)';
-                } else if (!arg.isOther && data.bgColorMap && data.bgColorMap[dateStr]) {
-                    cellBgColor = data.bgColorMap[dateStr];
+                    arg.el.style.backgroundColor = 'var(--fc-today-bg-color)';
+                } else {
+                    arg.el.style.backgroundColor = ''; // Let CSS handles via classes
                 }
-                arg.el.style.backgroundColor = cellBgColor;
             },
 
             windowResize: (view) => {
@@ -3863,7 +3866,7 @@ const App = {
                 if (item.academic_year && item.start_date) {
                     const ay = parseInt(item.academic_year);
                     const ayStart = `${ay}-03-01`;
-                    const ayEnd = `${ay + 1}-02 - 29`;
+                    const ayEnd = `${ay + 1}-02-29`;
                     if (item.start_date < ayStart || item.start_date > ayEnd) {
                         return; // Skip ghost data inconsistent with its academic year
                     }
@@ -5524,7 +5527,23 @@ const App = {
         });
     },
 
-    refreshCalendarData: async function (start, end) {
+    refreshCalendarData: async function (start = null, end = null) {
+        // [FIX] Ensure start and end are provided, fallback to current view range
+        if (!start || !end) {
+            const calendar = this.state.calendar;
+            if (calendar) {
+                const view = calendar.view;
+                start = start || view.activeStart;
+                end = end || view.activeEnd;
+            }
+        }
+        
+        // Final fallback to prevent TypeErrors if calendar is not yet initialized
+        if (!start || !end) {
+            console.warn('[Refresh] Missing date range for refresh; skipping.');
+            return;
+        }
+
         const fetchId = ++this.state._lastFetchId;
 
         const startY = start.getFullYear();
@@ -5625,28 +5644,48 @@ const App = {
         };
 
         allEvents.forEach(e => {
-            const dateKey = e.start;
             if (e.display === 'background' || e.display === 'block') {
-                if (e.display === 'background') data.backgroundEvents.push(e);
-
-                if (e.className.includes('holiday-bg-event') || e.className.includes('event-major-text') || e.className.includes('event-env-text') || e.className.includes('event-exam-text') || e.className.includes('event-term-text')) {
-                    if (!data.holidayMap[dateKey]) data.holidayMap[dateKey] = [];
+                // [FIX] Background events can be multi-day ranges. Populate bgColorMap for every day in range.
+                const startEv = typeof e.start === 'string' ? this.parseLocal(e.start) : e.start;
+                const endEv = e.end ? (typeof e.end === 'string' ? this.parseLocal(e.end) : e.end) : startEv;
+                
+                let curr = new Date(startEv);
+                let loop = 0;
+                while (curr <= endEv && loop < 366) {
+                    const dKey = this.formatLocal(curr);
                     const label = e.extendedProps?.label || e.title;
-                    if (label && !data.holidayMap[dateKey].includes(label)) data.holidayMap[dateKey].push(label);
-                    if (e.className.includes('holiday-bg-event')) {
-                        data.redDayMap[dateKey] = true;
-                        data.bgColorMap[dateKey] = '#fef2f2';
-                    } else if (e.className.includes('vacation-bg-event')) {
-                        data.bgColorMap[dateKey] = '#fffcfc';
-                    } else if (e.className.includes('event-exam-text')) {
-                        data.bgColorMap[dateKey] = '#fff7ed';
-                    } else if (e.className.includes('event-major-text')) {
-                        data.bgColorMap[dateKey] = '#eff6ff';
-                    }
-                }
 
-                if (e.className.includes('vacation-bg-event')) {
-                    data.bgColorMap[dateKey] = '#fffcfc';
+                    if (e.className.includes('holiday-bg-event') || e.className.includes('event-major-text') || e.className.includes('event-env-text') || e.className.includes('event-exam-text') || e.className.includes('event-term-text')) {
+                        if (!data.holidayMap[dKey]) data.holidayMap[dKey] = [];
+                        if (label && !data.holidayMap[dKey].includes(label)) data.holidayMap[dKey].push(label);
+                        
+                        if (e.className.includes('holiday-bg-event')) {
+                            data.redDayMap[dKey] = true;
+                            data.bgColorMap[dKey] = '#fef2f2';
+                        } else if (e.className.includes('vacation-bg-event')) {
+                            data.bgColorMap[dKey] = '#fffcfc';
+                        } else if (e.className.includes('event-exam-text')) {
+                            data.bgColorMap[dKey] = '#fff7ed';
+                        } else if (e.className.includes('event-major-text')) {
+                            data.bgColorMap[dKey] = '#eff6ff';
+                        }
+                    }
+
+                    if (e.className.includes('vacation-bg-event')) {
+                        data.bgColorMap[dKey] = '#fffcfc';
+                    }
+
+                    if (e.display === 'background') {
+                        // Ensure we don't push duplicates if e was already split into single-day objects
+                        data.backgroundEvents.push({
+                            ...e,
+                            start: dKey,
+                            end: dKey // Single day background
+                        });
+                    }
+
+                    curr.setDate(curr.getDate() + 1);
+                    loop++;
                 }
             } else {
                 let current = this.parseLocal(e.start);
@@ -5701,7 +5740,12 @@ const App = {
 
         this.state.calendarData = data;
         this.state.calendar.setOption('events', data.backgroundEvents);
-        // REMOVED: this.state.calendar.render(); // Redundant and causes freeze due to full re-render
+
+        // [FIX] Re-enable render to update cell background colors after async fetch
+        // Use a flag to prevent infinite recursion if datesSet is triggered
+        this._isRefreshing = true;
+        this.state.calendar.render();
+        this._isRefreshing = false;
     },
 
     renderCalendarCell: function (arg) {
@@ -5732,15 +5776,8 @@ const App = {
         headerGroup.style.transform = 'translateZ(0)';
         headerGroup.style.backfaceVisibility = 'hidden';
 
-        // Ensure a solid background even if not a holiday, so schedule text hides behind it
-        let cellBgColor = '#ffffff';
-        if (arg.isOther) {
-            cellBgColor = '#ffffff'; // White for non-current month days (no background)
-        } else if (data.bgColorMap && data.bgColorMap[dateStr]) {
-            cellBgColor = data.bgColorMap[dateStr];
-        }
-
-        headerGroup.style.backgroundColor = cellBgColor;
+        // [COLOR FIX] Background color is now managed via CSS classes on .calendar-cell-header
+        // based on the classes applied to the parent .fc-daygrid-day.
         // pointerEvents: 'none' REMOVED - handled by td-level click
 
         headerGroup.style.paddingTop = '4px'; // COVERAGE: Padding is part of the colored area

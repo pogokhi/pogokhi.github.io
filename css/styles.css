@@ -1294,3 +1294,21 @@ html {
         font-size: 0.8rem !important;
     }
 }
+
+/* FullCalendar Cell Backgrounds (Applied via dayCellClassNames) */
+.fc-daygrid-day.is-holiday .calendar-cell-header { background-color: #fef2f2 !important; }
+.fc-daygrid-day.is-vacation .calendar-cell-header { background-color: #fffcfc !important; }
+.fc-daygrid-day.is-exam .calendar-cell-header { background-color: #fff7ed !important; }
+.fc-daygrid-day.is-major .calendar-cell-header { background-color: #eff6ff !important; }
+
+/* In Other Month days, we dim these backgrounds or force them white */
+.fc-daygrid-day.is-other-month.is-holiday .calendar-cell-header,
+.fc-daygrid-day.is-other-month.is-vacation .calendar-cell-header,
+.fc-daygrid-day.is-other-month.is-exam .calendar-cell-header,
+.fc-daygrid-day.is-other-month.is-major .calendar-cell-header {
+    background-color: #ffffff !important;
+}
+
+.is-holiday .fc-daygrid-day-number {
+    color: #dc2626 !important;
+}
