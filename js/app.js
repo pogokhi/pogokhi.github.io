@@ -5984,6 +5984,13 @@ const App = {
                 container.appendChild(deptDiv);
             });
         }
+
+        // 4. Final Spacer for Vertical Distribution (Ensures uniform row height and header alignment)
+        const bottomSpacer = document.createElement('div');
+        bottomSpacer.className = 'fc-daygrid-day-bottom';
+        bottomSpacer.style.width = '100%';
+        container.appendChild(bottomSpacer);
+
         return { domNodes: [container] };
     },
 
