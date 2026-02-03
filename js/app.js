@@ -306,6 +306,8 @@ const App = {
             }
         } catch (e) {
             console.error("[Auth] checkAuth Error:", e);
+            // If it's a 400 on session recovery, it's usually an expired refresh token. 
+            // We can ignore or clear session.
         }
 
         // Listen for auth changes
@@ -762,7 +764,17 @@ const App = {
                 // But onAuthStateChange will trigger syncUser.
                 // However, we want to immediately redirect to pending if needed.
             } catch (err) {
-                errorMsg.textContent = '로그인 실패: 이메일 또는 비밀번호를 확인하세요.';
+                console.error('[Login] Error:', err);
+                let msg = err.message || '이메일 또는 비밀번호를 확인하세요.';
+
+                // [UX] Translate specific Supabase errors to friendly Korean
+                if (msg.includes('Invalid login credentials')) {
+                    msg = '아이디나 비밀번호가 올바르지 않습니다.';
+                } else if (msg.includes('Email not confirmed')) {
+                    msg = '이메일 인증이 완료되지 않았습니다.';
+                }
+
+                errorMsg.textContent = `로그인 실패: ${msg}`;
                 errorMsg.classList.remove('hidden');
                 btn.disabled = false;
                 btn.innerHTML = '로그인';
