@@ -2789,13 +2789,13 @@ const App = {
                     };
                 }
 
-                // Removed redundant backgrounds from topContainer and eventsContainer to prevent doubling
-                if (topContainer) topContainer.remove();
+                // Remove default FullCalendar containers that might cause whitespace or layout issues
+                const eventsContainer = arg.el.querySelector('.fc-daygrid-day-events');
+                const topContainer = arg.el.querySelector('.fc-daygrid-day-top');
                 if (eventsContainer) eventsContainer.remove();
+                if (topContainer) topContainer.remove();
 
                 // [BORDRE FIX] Apply background color to the actual cell (td) instead of the inner container.
-                // This ensures the background logic doesn't interfere with the table's own border rendering.
-                dateStr = this.formatLocal(arg.date);
                 const data = this.state.calendarData || { bgColorMap: {} };
                 
                 let cellBgColor = '#ffffff';
@@ -5543,7 +5543,7 @@ const App = {
         if (missingAYs.length > 0) promises.push(window.SupabaseClient.supabase.from('basic_schedules').select('*').in('academic_year', missingAYs));
         else promises.push(Promise.resolve({ data: [] }));
 
-        if (needsDepts) promises.push(window.SupabaseClient.supabase.from('departments').select('*'));
+        if (needsDepts) promises.push(window.SupabaseClient.supabase.from('departments').select('*').order('sort_order', { ascending: true }));
         else promises.push(Promise.resolve({ data: this.state.cache.departments }));
 
         if (needsSchedules) promises.push(this.fetchSchedules());
@@ -5684,9 +5684,17 @@ const App = {
             }
         });
 
-        // [PERFORMANCE] Pre-calculate department order map for sorting in renderCalendarCell
+        // [PERFORMANCE & SORTING] Pre-calculate department order map for sorting in renderCalendarCell
+        // Explicitly sort by sort_order and then name to ensure predictable ordering
         const deptOrderMap = {};
-        allDepartments.forEach((d, idx) => {
+        const sortedDepts = [...allDepartments].sort((a, b) => {
+            const ordA = a.sort_order ?? 999;
+            const ordB = b.sort_order ?? 999;
+            if (ordA !== ordB) return ordA - ordB;
+            return (a.dept_name || "").localeCompare(b.dept_name || "");
+        });
+
+        sortedDepts.forEach((d, idx) => {
             deptOrderMap[String(d.id)] = idx;
         });
         data.deptOrderMap = deptOrderMap;
