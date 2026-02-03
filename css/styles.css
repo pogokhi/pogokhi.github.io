@@ -1296,6 +1296,7 @@ html {
 }
 
 /* FullCalendar Cell Backgrounds (Applied via dayCellClassNames) */
+.calendar-cell-header { background-color: #ffffff; } /* Opaque default to mask scrolling content */
 .fc-daygrid-day.is-holiday .calendar-cell-header { background-color: #fef2f2 !important; }
 .fc-daygrid-day.is-vacation .calendar-cell-header { background-color: #fffcfc !important; }
 .fc-daygrid-day.is-exam .calendar-cell-header { background-color: #fff7ed !important; }
