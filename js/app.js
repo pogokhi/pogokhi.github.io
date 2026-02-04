@@ -1395,6 +1395,7 @@ const App = {
         this.renderFixedHolidays(this.currentFixedHolidays);
 
         // 2. Identify Variables (In DB but not in Standard)
+        const variableRows = schedules.filter(r => r.type === 'holiday' && !r.code);
         const ayStart = `${targetY}-03-01`;
         const ayEnd = `${parseInt(targetY) + 1}-02-29`;
 
@@ -4835,6 +4836,11 @@ const App = {
             modalContainer.classList.add('invisible');
             modalContainer.innerHTML = '';
         };
+
+        const refreshYearDepts = async () => {
+            const y = parseInt(yearSelect.value);
+            yearDepartments = await this.fetchDepartments(y);
+        };
         document.getElementById('btn-excel-close').onclick = close;
         document.getElementById('btn-excel-cancel').onclick = close;
 
@@ -4938,7 +4944,7 @@ const App = {
                             const y = v.getFullYear();
                             const m = String(v.getMonth() + 1).padStart(2, '0');
                             const d = String(v.getDate()).padStart(2, '0');
-                            return `${y} -${m} -${d} `;
+                            return `${y}-${m}-${d}`;
                         }
                         return v.toString().trim();
                     };
