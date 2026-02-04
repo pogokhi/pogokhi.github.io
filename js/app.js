@@ -5963,6 +5963,14 @@ const App = {
                             // Optimistic update
                             ev.extendedProps.isPrintable = newValue;
 
+                            // [FIX] Update local cache to prevent revert during re-renders (e.g. view changes for Print)
+                            if (this.state.cache.schedules) {
+                                const cachedIdx = this.state.cache.schedules.findIndex(s => String(s.id) === String(ev.id));
+                                if (cachedIdx !== -1) {
+                                    this.state.cache.schedules[cachedIdx].is_printable = newValue;
+                                }
+                            }
+
                             // DB Update (Fire & Forget style for speed, validation via Supabase usually reliable)
                             await window.SupabaseClient.supabase
                                 .from('schedules')
