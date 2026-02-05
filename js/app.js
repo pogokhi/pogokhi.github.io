@@ -204,8 +204,8 @@ const App = {
             // If we are currently in a view, capture its date to state
             if (this.state.viewMode === 'calendar' && this.state.calendar) {
                 // Check if getDate exists to prevent crash
-                return (typeof this.state.calendar.getDate === 'function') 
-                    ? this.state.calendar.getDate() 
+                return (typeof this.state.calendar.getDate === 'function')
+                    ? this.state.calendar.getDate()
                     : new Date();
             }
             if (this.state.viewMode === 'dept_list' && this.state.deptViewDate) {
@@ -240,17 +240,17 @@ const App = {
                 } else if (viewName === 'list') {
                     const d = new Date(sharedDate);
                     const day = d.getDay();
-                    const diff = d.getDate() - day + (day === 0 ? -6 : 1); 
+                    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
                     this.state.listViewStart = new Date(d.setDate(diff));
                     this.state.listViewWeeks = this.state.listViewWeeks || 1; // Maintain week count preference
                 }
             } else if (!this.state.initialDate && viewName === 'calendar') {
-                 // Fallback: If absolutely no date exists, set today
-                 this.state.initialDate = new Date();
+                // Fallback: If absolutely no date exists, set today
+                this.state.initialDate = new Date();
             }
 
             this.state.viewMode = viewName;
-            
+
             try {
                 localStorage.setItem('pogok_last_view', viewName);
             } catch (e) {
@@ -276,20 +276,20 @@ const App = {
         // Save state
         const v = this.state.viewMode || 'calendar';
         let d = new Date();
-        
+
         try {
-             if (v === 'calendar' && this.state.calendar && typeof this.state.calendar.getDate === 'function') {
-                 d = this.state.calendar.getDate();
-             } else if (v === 'dept_list' && this.state.deptViewDate) {
-                 d = new Date(this.state.deptViewDate);
-             } else if (this.state.initialDate) {
-                 d = new Date(this.state.initialDate);
-             }
-        } catch(e) {}
+            if (v === 'calendar' && this.state.calendar && typeof this.state.calendar.getDate === 'function') {
+                d = this.state.calendar.getDate();
+            } else if (v === 'dept_list' && this.state.deptViewDate) {
+                d = new Date(this.state.deptViewDate);
+            } else if (this.state.initialDate) {
+                d = new Date(this.state.initialDate);
+            }
+        } catch (e) { }
 
         sessionStorage.setItem('pogok_reload_date', d.toISOString());
         sessionStorage.setItem('pogok_reload_view', v);
-        
+
         // Force Reload
         window.location.reload();
     },
@@ -375,7 +375,7 @@ const App = {
             // [SECURITY FIX] If unauthorized (pending/rejected), REJECT ALL ACCESS.
             // Rule: Logout FIRST, then move to pending screen.
             console.warn(`[Auth GATING] User ${session.user.email} is ${status}. Logging out and redirecting to pending.`);
-            
+
             await window.SupabaseClient.supabase.auth.signOut();
             this.clearCache();
             this.navigate('pending');
@@ -519,42 +519,42 @@ const App = {
                 ? `<button id="btn-admin" class="text-sm px-3 py-1 border border-purple-200 text-purple-700 rounded bg-purple-50 hover:bg-purple-100">관리자</button>`
                 : '';
 
-        // [FIX] Trim whitespace to prevent anonymous flex items
-        infoContainer.innerHTML = `<span class="text-sm text-gray-700 hidden sm:inline">안녕하세요, <strong>${userEmail}</strong>님</span>${adminBtn}`;
-        authBtnContainer.innerHTML = `<button id="btn-logout" class="text-sm px-3 py-1 border border-gray-300 rounded hover:bg-gray-100">로그아웃</button>`;
+            // [FIX] Trim whitespace to prevent anonymous flex items
+            infoContainer.innerHTML = `<span class="text-sm text-gray-700 hidden sm:inline">안녕하세요, <strong>${userEmail}</strong>님</span>${adminBtn}`;
+            authBtnContainer.innerHTML = `<button id="btn-logout" class="text-sm px-3 py-1 border border-gray-300 rounded hover:bg-gray-100">로그아웃</button>`;
 
-        const logoutBtn = document.getElementById('btn-logout');
-        if (logoutBtn) {
-            logoutBtn.onclick = async () => {
-                if (!confirm('로그아웃 하시겠습니까?')) return;
-                await window.SupabaseClient.supabase.auth.signOut();
-                this.clearCache();
-                window.location.replace(window.location.pathname + '#calendar');
-            };
-        }
-
-        if (isAdmin) {
-            const btnAdmin = document.getElementById('btn-admin');
-            if (btnAdmin) {
-                btnAdmin.onclick = () => this.navigate('admin');
+            const logoutBtn = document.getElementById('btn-logout');
+            if (logoutBtn) {
+                logoutBtn.onclick = async () => {
+                    if (!confirm('로그아웃 하시겠습니까?')) return;
+                    await window.SupabaseClient.supabase.auth.signOut();
+                    this.clearCache();
+                    window.location.reload();
+                };
             }
+
+            if (isAdmin) {
+                const btnAdmin = document.getElementById('btn-admin');
+                if (btnAdmin) {
+                    btnAdmin.onclick = () => this.navigate('admin');
+                }
+            }
+        } else {
+            infoContainer.innerHTML = '';
+            authBtnContainer.innerHTML = `<button id="btn-header-login" class="text-sm px-3 py-1 border border-gray-300 rounded hover:bg-gray-100" onclick="App.navigate('login')">로그인</button>`;
         }
-    } else {
-        infoContainer.innerHTML = '';
-        authBtnContainer.innerHTML = `<button id="btn-header-login" class="text-sm px-3 py-1 border border-gray-300 rounded hover:bg-gray-100" onclick="App.navigate('login')">로그인</button>`;
-    }
 
-    // Update other UI elements based on role
-    this.updateAccessControls();
+        // Update other UI elements based on role
+        this.updateAccessControls();
 
-    // [FIX] Hide empty containers explicitly (style.display) to prevent double gaps
-    if (infoContainer.children.length === 0 && !infoContainer.textContent.trim()) {
-        infoContainer.style.display = 'none';
-        infoContainer.classList.add('hidden');
-    } else {
-        infoContainer.style.display = 'flex';
-        infoContainer.classList.remove('hidden');
-    }
+        // [FIX] Hide empty containers explicitly (style.display) to prevent double gaps
+        if (infoContainer.children.length === 0 && !infoContainer.textContent.trim()) {
+            infoContainer.style.display = 'none';
+            infoContainer.classList.add('hidden');
+        } else {
+            infoContainer.style.display = 'flex';
+            infoContainer.classList.remove('hidden');
+        }
     },
 
     // Helper: Check if current user has permission to add/edit schedules
@@ -2484,14 +2484,14 @@ const App = {
             alert("업데이트 실패: " + error.message);
             await this.loadAdminUsers();
         } else if (!data || data.length === 0) {
-             console.warn("Update succeeded but no rows were affected. Possible RLS issue or ID mismatch.");
-             alert("업데이트가 적용되지 않았습니다. (권한 문제 가능성)");
-             await this.loadAdminUsers();
+            console.warn("Update succeeded but no rows were affected. Possible RLS issue or ID mismatch.");
+            alert("업데이트가 적용되지 않았습니다. (권한 문제 가능성)");
+            await this.loadAdminUsers();
         } else {
-             // Success
-             console.log("Update Success:", data);
-             await this.loadAdminUsers(); // Refresh to reflect change (colors etc)
-             this.logAction('UPDATE_STATUS', 'user_roles', userId, { newStatus });
+            // Success
+            console.log("Update Success:", data);
+            await this.loadAdminUsers(); // Refresh to reflect change (colors etc)
+            this.logAction('UPDATE_STATUS', 'user_roles', userId, { newStatus });
         }
     },
 
@@ -2666,24 +2666,24 @@ const App = {
 
                 // [STABLE] Update Title and Sync Navigation Controls
                 const middleDate = new Date((info.start.getTime() + info.end.getTime()) / 2);
-                const expectedTitle = `${middleDate.getFullYear()}년 ${middleDate.getMonth() + 1}월`; 
-                this._expectedTitle = expectedTitle; 
+                const expectedTitle = `${middleDate.getFullYear()}년 ${middleDate.getMonth() + 1}월`;
+                this._expectedTitle = expectedTitle;
 
                 const toolbarEl = document.querySelector('.fc-header-toolbar');
                 if (toolbarEl) {
                     const chunks = toolbarEl.querySelectorAll('.fc-toolbar-chunk');
-                    const centerChunk = chunks[1]; 
+                    const centerChunk = chunks[1];
                     if (centerChunk) {
                         const containerId = 'custom-title-container';
                         let container = centerChunk.querySelector(`#${containerId}`);
-                        
+
                         // Initialize once. Selective updates thereafter to prevent thrashing.
                         if (!container) {
-                            centerChunk.innerHTML = ''; 
+                            centerChunk.innerHTML = '';
                             container = document.createElement('div');
                             container.id = containerId;
                             container.className = 'flex items-center gap-7 font-bold text-xl text-gray-800';
-                            
+
                             container.innerHTML = `
                                 <button id="custom-nav-prev" class="w-8 h-8 bg-white border border-gray-300 rounded shadow-sm hover:bg-gray-50 text-gray-600 transition flex justify-center items-center">
                                     <span class="material-symbols-outlined pointer-events-none">chevron_left</span>
@@ -2698,7 +2698,7 @@ const App = {
                             container.onclick = (e) => {
                                 const btn = e.target.closest('button');
                                 if (!btn) return;
-                                
+
                                 e.preventDefault();
                                 e.stopPropagation();
 
@@ -2815,7 +2815,7 @@ const App = {
 
                 // [BORDRE FIX] Note: Background color is now managed via CSS classes in dayCellClassNames 
                 // for better reactivity across month navigations and FullCalendar re-renders.
-                
+
                 if (arg.isToday) {
                     arg.el.style.backgroundColor = 'var(--fc-today-bg-color)';
                 } else {
@@ -2857,7 +2857,7 @@ const App = {
             const showWeekends = localStorage.getItem('calendar-show-weekends') === 'true';
             weekendChk.checked = showWeekends;
             calendar.setOption('weekends', showWeekends);
-            
+
             // [CRITICAL FIX] Store instance globally so we can capture date later
             this.state.calendar = calendar;
 
@@ -3216,7 +3216,7 @@ const App = {
 
         // 2. Fetch Data
         const schedules = await this.fetchSchedules();
-        
+
         // [FIX] Get departments for the TARGET academic year
         const departments = await this.fetchDepartmentsWithFallback(targetAcademicYear);
 
@@ -3255,13 +3255,13 @@ const App = {
 
                 // Robust Dept identification
                 const sDeptIdKey = s.dept_id ? String(s.dept_id) : null;
-                const dept = departments.find(d => String(d.id) === sDeptIdKey) || 
-                             (this.SPECIAL_DEPTS || []).find(sd => String(sd.id) === sDeptIdKey) ||
-                             departments.find(d => d.dept_name === s.dept_name || d.dept_short === s.dept_name) ||
-                             (this.SPECIAL_DEPTS || []).find(sd => sd.name === s.dept_name || sd.short_name === s.dept_name);
+                const dept = departments.find(d => String(d.id) === sDeptIdKey) ||
+                    (this.SPECIAL_DEPTS || []).find(sd => String(sd.id) === sDeptIdKey) ||
+                    departments.find(d => d.dept_name === s.dept_name || d.dept_short === s.dept_name) ||
+                    (this.SPECIAL_DEPTS || []).find(sd => sd.name === s.dept_name || sd.short_name === s.dept_name);
 
-                const isMyDept = (this.state.role === 'dept' && this.state.myDeptIdEn && dept && 
-                                  (String(dept.dept_id_en) === String(this.state.myDeptIdEn) || String(dept.id) === String(this.state.myDeptIdEn)));
+                const isMyDept = (this.state.role === 'dept' && this.state.myDeptIdEn && dept &&
+                    (String(dept.dept_id_en) === String(this.state.myDeptIdEn) || String(dept.id) === String(this.state.myDeptIdEn)));
                 const isSpecial = dept && dept.id && ['admin_office', 'advanced_teacher', 'vice_principal', 'principal'].includes(dept.id);
                 const isUncategorized = !dept || (dept.dept_name === '기타');
 
@@ -3306,7 +3306,22 @@ const App = {
 
             const groups = {};
             dailySchedules.forEach(s => {
-                const deptName = s.dept_name || '기타';
+                // [FIX] Robustly resolve department name using ID if name is missing or generic
+                let deptName = s.dept_name;
+
+                if ((!deptName || deptName === '기타') && s.dept_id) {
+                    const targetDept = departments.find(d => String(d.id) === String(s.dept_id));
+                    if (targetDept) {
+                        deptName = targetDept.dept_name;
+                    } else {
+                        // Check Special Depts if not found in main departments
+                        const special = (this.SPECIAL_DEPTS || []).find(sd => String(sd.id) === String(s.dept_id));
+                        if (special) deptName = special.name;
+                    }
+                }
+
+                deptName = deptName || '기타';
+
                 if (!groups[deptName]) groups[deptName] = [];
                 groups[deptName].push({ title: s.title, desc: s.description });
             });
@@ -3537,9 +3552,8 @@ const App = {
             const shortName = d.dept_short || d.dept_name.substring(0, 2);
             headerHtml += `
             <th class="col-dept" style="padding: 0 4px; vertical-align: middle; box-shadow: inset 0 -5px 0 ${color}; height: 50px;">
-                    <div class="print:hidden">${d.dept_name}</div>
-                    <div class="hidden print:block">${shortName}</div>
-                </th>`;
+                <div>${d.dept_name}</div>
+            </th>`;
         });
         headerHtml += `</tr>`;
         thead.innerHTML = headerHtml;
@@ -3584,22 +3598,22 @@ const App = {
                 const deptEn = dept.dept_id_en ? String(dept.dept_id_en).trim().toLowerCase() : null;
                 const deptId = String(dept.id);
                 const myDbId = this.state.myDeptId ? String(this.state.myDeptId) : null;
-                
+
                 const normalize = (str) => str ? String(str).trim().replace(/\s+/g, '').toLowerCase() : '';
-                
+
                 let rawMyName = this.state.user ? this.state.user.dept_name : '';
                 // [FALLBACK] If user.dept_name missing (hot reload case), find it by ID
                 if (!rawMyName && this.state.myDeptIdEn) {
-                        const found = (departments || []).find(d => String(d.dept_id_en) === String(this.state.myDeptIdEn)) ||
-                                    (this.state.departments || []).find(d => String(d.dept_id_en) === String(this.state.myDeptIdEn));
-                        if (found) rawMyName = found.dept_name;
+                    const found = (departments || []).find(d => String(d.dept_id_en) === String(this.state.myDeptIdEn)) ||
+                        (this.state.departments || []).find(d => String(d.dept_id_en) === String(this.state.myDeptIdEn));
+                    if (found) rawMyName = found.dept_name;
                 }
 
                 const myName = normalize(rawMyName);
                 const colName = normalize(dept.dept_name);
 
                 const isColMyDept = (this.state.role === 'dept' && (
-                    (myEn && deptEn && myEn === deptEn) || 
+                    (myEn && deptEn && myEn === deptEn) ||
                     (myEn && deptId === myEn) ||
                     (myDbId && deptId === myDbId) ||
                     (myName && colName && myName === colName) // Includes name match
@@ -3613,13 +3627,13 @@ const App = {
                     if (sEnd.includes('T')) sEnd = sEnd.split('T')[0];
 
                     if (!checkOverlap(sStart, sEnd, dateStr)) return false;
-                    
+
                     const sDeptId = s.dept_id ? String(s.dept_id) : null;
                     const sDeptName = s.dept_name;
-                    
+
                     const matchById = sDeptId && sDeptId === String(dept.id);
                     const matchByName = sDeptName === dept.dept_name || sDeptName === dept.dept_short;
-                    
+
                     // [FORCE MATCH - AUTHOR]
                     // If I created this schedule, and this column IS my dept column, force show it here.
                     // This handles cases where ID changed and Name has typo/mismatch.
@@ -3627,7 +3641,7 @@ const App = {
                     const forceMatch = isColMyDept && isAuthor;
 
                     const isMatch = matchById || matchByName || forceMatch;
-                    
+
                     if (!isMatch) return false;
 
                     // [STRICT DEPT PRIVACY]
@@ -3638,7 +3652,7 @@ const App = {
                         // Or if I am explicitly part of the schedule's dept (handled by isColMyDept since we only show matched)
                         if (!isAdmin && !isColMyDept) return false;
                     }
-                    
+
                     // [GUEST/STAFF VISIBILITY]
                     if (!this.state.user && s.visibility !== 'public') return false;
                     if (s.visibility === 'private') {
@@ -4076,8 +4090,8 @@ const App = {
                 if (!dept) dept = { dept_name: '기타', dept_color: '#333' };
 
                 // [IDENTIFY MY DEPT] Cross-year stable check
-                const isMyDept = (this.state.role === 'dept' && this.state.myDeptIdEn && 
-                                  (String(dept.dept_id_en) === String(this.state.myDeptIdEn) || String(dept.id) === String(this.state.myDeptIdEn)));
+                const isMyDept = (this.state.role === 'dept' && this.state.myDeptIdEn &&
+                    (String(dept.dept_id_en) === String(this.state.myDeptIdEn) || String(dept.id) === String(this.state.myDeptIdEn)));
                 const isSpecial = dept && dept.id && ['admin_office', 'advanced_teacher', 'vice_principal', 'principal'].includes(dept.id);
                 const isUncategorized = !dept || (dept.dept_name === '기타');
 
@@ -4097,9 +4111,18 @@ const App = {
                 }
 
                 const finalDeptId = dept.id ? String(dept.id) : 'uncategorized';
+
+                // [PRINT FIX] Always Render Full Dept Name (Screen & Print)
+                const dName = dept.dept_name || '기타';
+
+                // Clean existing prefix if it exists (robustness against DB or Legacy)
+                let cleanTitle = s.title || '';
+                // Remove leading "◈ chars " pattern if present
+                cleanTitle = cleanTitle.replace(/^◈\s*\S+\s*/, '');
+
                 events.push({
                     id: s.id,
-                    title: s.title,
+                    title: cleanTitle,
                     start: s.start_date,
                     end: s.end_date,
                     backgroundColor: dept.dept_color || '#3788d8',
@@ -4216,7 +4239,7 @@ const App = {
             // Filter by stable English ID (cross-year compatible)
             const myEnId = this.state.myDeptIdEn;
             filteredDepts = filteredDepts.filter(d => String(d.dept_id_en) === String(myEnId));
-            
+
             // If still empty by English ID, fallback to database ID if it matches this year's departments
             if (filteredDepts.length === 0 && this.state.myDeptId) {
                 filteredDepts = (this.state.departments || []).filter(d => String(d.id) === String(this.state.myDeptId));
@@ -4323,7 +4346,7 @@ const App = {
                     alert('삭제 실패: ' + error.message);
                 } else {
                     this.logAction('DELETE', 'schedules', parseInt(sid), { title: titleInput.value });
-                    
+
                     this.closeModal();
                     // [Race Condition Fix] Delay refresh aggressively (500ms)
                     setTimeout(() => this.refreshCurrentView(), 500);
@@ -4431,8 +4454,8 @@ const App = {
                         .update(updatePayload)
                         .eq('id', parseInt(scheduleId))
                         .select();
-                    
-                    const timeoutPromiseUpdate = new Promise((_, reject) => 
+
+                    const timeoutPromiseUpdate = new Promise((_, reject) =>
                         setTimeout(() => reject(new Error('서버 응답 시간이 초과되었습니다. 네트워크 상태를 확인하거나 잠시 후 다시 시도해주세요.')), 15000)
                     );
 
@@ -4455,8 +4478,8 @@ const App = {
                         .from('schedules')
                         .insert(sanitizedBatch)
                         .select();
-                    
-                    const timeoutPromise = new Promise((_, reject) => 
+
+                    const timeoutPromise = new Promise((_, reject) =>
                         setTimeout(() => reject(new Error('서버 응답 시간이 초과되었습니다. 네트워크 상태를 확인하거나 잠시 후 다시 시도해주세요.')), 15000)
                     );
 
@@ -4469,7 +4492,7 @@ const App = {
                     console.error("[Save] Supabase Error:", result.error);
                     throw result.error;
                 }
-                
+
                 // [RLS CHECK] If data is empty, it means RLS blocked the write or ID not found
                 if (!result.data || result.data.length === 0) {
                     console.warn("[Save] RLS Warning: No data returned from select()");
@@ -5555,7 +5578,7 @@ const App = {
                 end = end || view.activeEnd;
             }
         }
-        
+
         // Final fallback to prevent TypeErrors if calendar is not yet initialized
         if (!start || !end) {
             console.warn('[Refresh] Missing date range for refresh; skipping.');
@@ -5666,7 +5689,7 @@ const App = {
                 // [FIX] Background events can be multi-day ranges. Populate bgColorMap for every day in range.
                 const startEv = typeof e.start === 'string' ? this.parseLocal(e.start) : e.start;
                 const endEv = e.end ? (typeof e.end === 'string' ? this.parseLocal(e.end) : e.end) : startEv;
-                
+
                 let curr = new Date(startEv);
                 let loop = 0;
                 while (curr <= endEv && loop < 366) {
@@ -5676,7 +5699,7 @@ const App = {
                     if (e.className.includes('holiday-bg-event') || e.className.includes('event-major-text') || e.className.includes('event-env-text') || e.className.includes('event-exam-text') || e.className.includes('event-term-text')) {
                         if (!data.holidayMap[dKey]) data.holidayMap[dKey] = [];
                         if (label && !data.holidayMap[dKey].includes(label)) data.holidayMap[dKey].push(label);
-                        
+
                         if (e.className.includes('holiday-bg-event')) {
                             data.redDayMap[dKey] = true;
                             data.bgColorMap[dKey] = '#fef2f2';
@@ -5847,6 +5870,7 @@ const App = {
             // Add (오늘) Label
             if (arg.isToday) {
                 const todaySpan = document.createElement('span');
+                todaySpan.className = 'fc-today-label'; // Added for print control
                 todaySpan.style.display = 'inline-block';
                 todaySpan.style.fontSize = '10px';
                 todaySpan.style.fontWeight = 'bold';
@@ -6033,12 +6057,12 @@ const App = {
             // -------------------------------------------------------------------
             const visibleRows = Array.from(calendarEl.querySelectorAll('.fc-daygrid-body table tr'))
                 .filter(row => row.offsetParent !== null); // Check visibility
-            
+
             console.log(`[distributeVerticalSpace] Visible Rows: ${visibleRows.length}`);
 
             if (visibleRows.length === 0) {
-                 console.warn("[distributeVerticalSpace] No visible rows found. Container might be hidden.");
-                 return;
+                console.warn("[distributeVerticalSpace] No visible rows found. Container might be hidden.");
+                return;
             }
 
             const windowHeight = window.innerHeight;
@@ -6047,7 +6071,7 @@ const App = {
 
             const rect = mainContent.getBoundingClientRect();
             const availableTotal = windowHeight - rect.top;
-            
+
             // [FIX] Increase safety margin for mobile to prevent cutoff in Samsung Browser etc.
             const isMobile = window.innerWidth <= 768;
             const safetyMargin = isMobile ? 35 : 10;
@@ -6084,15 +6108,15 @@ const App = {
                     // Actually, simpler: The spacer is just a div. Its offsetHeight IS the gap.
                     // If it has content inside (which it shouldn't, strictly speaking, mostly empty or absolute), 
                     // our previous logic was setting style.height.
-                    
+
                     // Safe approach: Trust the computed style height if possible, or offsetHeight.
                     // Since we control this via style.height, let's try to parse it, or fallback to offsetHeight.
                     // But offsetHeight is reliable.
                     rowSpacerHeight = rowSpacers[0].offsetHeight;
-                    
+
                     rowSpacers.forEach(el => bottomEls.push(el));
                 }
-                
+
                 contentH -= rowSpacerHeight;
             });
 
@@ -6101,7 +6125,7 @@ const App = {
             const remainder = availableTotal - (overhead + contentH);
             const rowCount = visibleRows.length;
             const heightPerWeek = Math.floor(remainder / rowCount);
-            
+
             // USER REQUEST: Minimum 60px
             const finalGap = Math.max(60, heightPerWeek);
 
