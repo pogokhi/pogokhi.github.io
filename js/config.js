@@ -1,4 +1,4 @@
 window.SUPABASE_CONFIG = {
-    SUPABASE_URL: "https://tdqtherewtaodfualigf.supabase.co",
-    SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRkcXRoZXJld3Rhb2RmdWFsaWdmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgwOTQ0ODcsImV4cCI6MjA4MzY3MDQ4N30.qBVKMrZWNvEcAQL2ZGADHIPS0zB8n71OxAdzqWgnzy8"
+   SUPABASE_URL: "https://your-project-url.supabase.co",
+   SUPABASE_ANON_KEY: "your-anon-key...",
 };
