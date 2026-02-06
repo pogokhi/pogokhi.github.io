@@ -734,8 +734,7 @@ const App = {
         const errorMsg = document.getElementById('login-error');
         const DOMAIN = 'goe.edu'; // Default domain for short IDs
 
-        form.onsubmit = async (e) => {
-            e.preventDefault();
+        const performLogin = async () => {
             let email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value;
             const btn = document.getElementById('btn-login-submit');
@@ -762,9 +761,8 @@ const App = {
 
                 // [STATUS CHECK] We need to ensure we have the status before redirecting
                 // But onAuthStateChange will trigger syncUser.
-                // However, we want to immediately redirect to pending if needed.
             } catch (err) {
-                console.error('[Login] Error:', err);
+                console.error('[Login] Error:', JSON.stringify(err, Object.getOwnPropertyNames(err)));
                 let msg = err.message || '이메일 또는 비밀번호를 확인하세요.';
 
                 // [UX] Translate specific Supabase errors to friendly Korean
@@ -786,6 +784,26 @@ const App = {
                 btn.innerHTML = '로그인';
             }
         };
+
+        // [RACE CONDITION FIX] Use manual event binding instead of form.onsubmit to prevent autoreload
+        const btnSubmit = document.getElementById('btn-login-submit');
+        if (btnSubmit) {
+            btnSubmit.onclick = (e) => {
+                e.preventDefault(); // Just in case
+                performLogin();
+            };
+        }
+
+        // Support Enter Key
+        const passInput = document.getElementById('password');
+        if (passInput) {
+            passInput.onkeydown = (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    performLogin();
+                }
+            };
+        }
     },
 
     initPendingView: function () {
