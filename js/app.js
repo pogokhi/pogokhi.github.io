@@ -779,12 +779,7 @@ const App = {
                 // [STATUS CHECK] We need to ensure we have the status before redirecting
                 // But onAuthStateChange will trigger syncUser.
             } catch (err) {
-                // [DEBUG] Alert error details for mobile users to report
-                // This is temporary debugging code to identify "Failed to fetch" root cause
-                const errorDetails = JSON.stringify(err, Object.getOwnPropertyNames(err));
-                alert(`[디버그]\n${errorDetails}\n\n메시지: ${err.message}`);
-                
-                console.error('[Login] Error:', errorDetails);
+                console.error('[Login] Error:', JSON.stringify(err, Object.getOwnPropertyNames(err)));
                 let msg = err.message || '이메일 또는 비밀번호를 확인하세요.';
 
                 // [UX] Translate specific Supabase errors to friendly Korean
