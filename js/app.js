@@ -772,9 +772,15 @@ const App = {
                     msg = '아이디나 비밀번호가 올바르지 않습니다.';
                 } else if (msg.includes('Email not confirmed')) {
                     msg = '이메일 인증이 완료되지 않았습니다.';
+                } else if (msg.includes('Failed to fetch') || msg.includes('Network request failed')) {
+                    // Network specific handling for mobile/firewall issues
+                    msg = '서버 접속에 실패했습니다. (Failed to fetch)\n' +
+                          '1. LTE/5G 데이터 대신 와이파이를 확인하거나,\n' +
+                          '2. 학교 와이파이인 경우 방화벽 문제일 수 있습니다.\n' +
+                          '3. 잠시 후 다시 시도해주세요.';
                 }
 
-                errorMsg.textContent = `로그인 실패: ${msg}`;
+                errorMsg.innerText = `로그인 실패: ${msg}`;
                 errorMsg.classList.remove('hidden');
                 btn.disabled = false;
                 btn.innerHTML = '로그인';
