@@ -20,8 +20,8 @@ window.SupabaseClient = {
                 auth: {
                     // [FIX] Use default storage (localStorage) for better mobile compatibility
                     // storage: sessionStorage, 
-                    persistSession: false, // [TEST] Disable storage to bypass blocking
-                    autoRefreshToken: false,
+                    persistSession: true, // [DIAGNOSTIC] Restore to true to test standard behavior
+                    autoRefreshToken: true,
                     detectSessionInUrl: false, // [FIX] Prevent URL hash conflict
                     flowType: 'pkce',          // [FIX] Use modern auth flow
                 },
