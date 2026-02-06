@@ -18,7 +18,10 @@ window.SupabaseClient = {
         try {
             this.supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
                 auth: {
-                    storage: sessionStorage,
+                    // [FIX] Use default storage (localStorage) for better mobile compatibility
+                    // storage: sessionStorage, 
+                    persistSession: true,
+                    autoRefreshToken: true,
                 },
             });
             console.log("🔌 Supabase Client Initialized");
