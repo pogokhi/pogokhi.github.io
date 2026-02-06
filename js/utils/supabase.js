@@ -22,6 +22,8 @@ window.SupabaseClient = {
                     // storage: sessionStorage, 
                     persistSession: true,
                     autoRefreshToken: true,
+                    detectSessionInUrl: false, // [FIX] Prevent URL hash conflict
+                    flowType: 'pkce',          // [FIX] Use modern auth flow
                 },
             });
             console.log("🔌 Supabase Client Initialized");
