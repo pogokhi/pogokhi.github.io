@@ -164,8 +164,33 @@ const App = {
                 console.log("[Init] Restored Date:", this.state.initialDate);
             }
             if (savedView) {
-                this.state.viewMode = savedView;
-                sessionStorage.removeItem('pogok_reload_view');
+                // If view logic supports explicit initial view, we can use it, 
+                // but usually URL hash or default handles it.
+                // We just rely on state here.
+            }
+
+            // [FIX] Event Delegation for Logout Button (Robustness)
+            const authContainer = document.getElementById('header-auth-btn');
+            if (authContainer) {
+                authContainer.addEventListener('click', async (e) => {
+                    // Handle dynamic logout button
+                    const btn = e.target.closest('#btn-logout');
+                    if (btn) {
+                        e.preventDefault();
+                        if (!confirm('로그아웃 하시겠습니까?')) return;
+                        
+                        try {
+                            btn.disabled = true;
+                            btn.innerText = '처리중...';
+                            await window.SupabaseClient.supabase.auth.signOut();
+                            this.clearCache();
+                            window.location.reload();
+                        } catch (err) {
+                            console.error("Logout failed:", err);
+                            window.location.reload(); // Fallback
+                        }
+                    }
+                });
             }
 
             // 4. Routing & History Setup
@@ -523,15 +548,8 @@ const App = {
             infoContainer.innerHTML = `<span class="text-sm text-gray-700 hidden sm:inline">안녕하세요, <strong>${userEmail}</strong>님</span>${adminBtn}`;
             authBtnContainer.innerHTML = `<button id="btn-logout" class="text-sm px-3 py-1 border border-gray-300 rounded hover:bg-gray-100">로그아웃</button>`;
 
-            const logoutBtn = document.getElementById('btn-logout');
-            if (logoutBtn) {
-                logoutBtn.onclick = async () => {
-                    if (!confirm('로그아웃 하시겠습니까?')) return;
-                    await window.SupabaseClient.supabase.auth.signOut();
-                    this.clearCache();
-                    window.location.reload();
-                };
-            }
+            // [DELEGATION FIX] Login logic is now handled by header-auth-btn delegation in init()
+            // No direct onclick binding here to prevent detachment issues.
 
             if (isAdmin) {
                 const btnAdmin = document.getElementById('btn-admin');
@@ -730,7 +748,6 @@ const App = {
     },
 
     initLoginView: function () {
-        const form = document.getElementById('login-form');
         const errorMsg = document.getElementById('login-error');
         const DOMAIN = 'goe.edu'; // Default domain for short IDs
 
