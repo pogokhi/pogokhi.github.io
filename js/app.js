@@ -857,8 +857,8 @@ const App = {
                 // 3. Ping Check
                 log("[3] 서버 Ping 확인 중...");
                 try {
-                    // HEAD request to Supabase URL (CORs might block but network err is different)
-                    await fetch(config.SUPABASE_URL, { method: 'HEAD', mode: 'no-cors' });
+                    // [FIX] Use GET to mimic browser navigation behavior exactly
+                    await fetch(config.SUPABASE_URL, { method: 'GET', mode: 'no-cors' });
                     log("✅ 서버 통신 연결 성공 (Ping)");
                 } catch (err) {
                     log(`❌ 서버 통신 실패: ${err.message}`);
