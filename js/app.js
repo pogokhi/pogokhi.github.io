@@ -6292,7 +6292,7 @@ const App = {
                     if (canEdit) {
                         const checkbox = document.createElement('input');
                         checkbox.type = 'checkbox';
-                        checkbox.className = 'no-print mt-0.5 mr-1 h-3 w-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500 flex-shrink-0';
+                        checkbox.className = 'no-print hidden md:block mt-0.5 mr-1 h-3 w-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500 flex-shrink-0';
                         checkbox.checked = ev.extendedProps.isPrintable !== false;
 
                         checkbox.onclick = async (e) => {
