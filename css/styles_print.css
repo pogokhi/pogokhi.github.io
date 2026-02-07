@@ -404,14 +404,12 @@
 
 /* [FIX] Layout Boundary Wrapper to prevent phantom pages */
 .list-view-print-wrapper {
-    display: grid !important;
-    grid-template-rows: min-content minmax(0, 1fr) !important;
-    row-gap: 0 !important; /* [FIX] Reset gap, use margin on header container */
-    height: 175mm !important; /* [FIX] Conservative height */
-    max-height: 175mm !important;
-    overflow: hidden !important;
-    break-after: avoid !important;
-    page-break-after: avoid !important;
+    display: flow-root !important; /* [FIX] Better BFC for print columns than Grid */
+    /* height: 175mm !important;  <-- REMOVED: Causing content clip */
+    /* max-height: 175mm !important; <-- REMOVED */
+    overflow: visible !important; /* [FIX] Unhide content so it flows naturally */
+    /* break-after: always !important; <-- REMOVED: Causes blank page at end */
+    /* page-break-after: always !important; <-- REMOVED */
     margin-bottom: 0 !important;
     width: 100% !important;
 }
@@ -427,12 +425,12 @@
     display: block !important;
     column-count: 2 !important;
     column-gap: 40px !important;
-    column-fill: auto !important;
-    height: 100% !important;
+    /* column-fill: auto !important; <-- REMOVED to allow natural balance */
+    /* height: 100% !important; <-- REMOVED to prevent calculation errors */
     width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
-    overflow: hidden !important;
+    /* overflow: hidden !important;  <-- REMOVED: This was clipping the 2nd column */
 }
 
 /* [FIX] Day Block Styling */
