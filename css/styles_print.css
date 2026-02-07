@@ -28,10 +28,10 @@
     }
 
     /* Structural Wrappers Reset - Force EVERY parent to be full width */
-    #app, 
-    #app > div.flex, 
-    #main-content, 
-    #view-container, 
+    #app,
+    #app > div.flex,
+    #main-content,
+    #view-container,
     .flex-grow,
     .fc-view-harness,
     .fc-view-harness-active {
@@ -66,7 +66,10 @@
     aside,
     #main-header,
     .print-controls,
-    #dept-view-table tfoot {
+    #dept-view-table tfoot,
+    /* [FIX] Hide Normal Dept View Screen Components */
+    #dept-view-content-wrapper,
+    .view-toolbar {
         display: none !important;
     }
 
@@ -81,11 +84,16 @@
         border-bottom: 1px solid #000 !important; /* Base divider for header */
     }
 
-    .print-header-left { font-size: 22pt !important; font-weight: bold !important; }
-    .print-header-right { font-size: 14pt !important; }
+    .print-header-left {
+        font-size: 22pt !important;
+        font-weight: bold !important;
+    }
+    .print-header-right {
+        font-size: 14pt !important;
+    }
 
     /* 3. Monthly Calendar (Skeleton Table Structure) */
-    
+
     /* Root FC Container - Force full width and kill all flex/alignment constraints */
     .fc {
         display: block !important;
@@ -143,7 +151,7 @@
         padding: 0 !important;
         margin: 0 !important;
         box-sizing: border-box !important;
-        
+
         /* [FIX] Ensure sharp corners */
         border-radius: 0 !important;
     }
@@ -161,22 +169,33 @@
         border-spacing: 0 !important;
         margin: 0 !important;
         border: none !important; /* Explicitly remove outer boundary */
-        
+
         /* [FIX] Ensure corners meet sharp and aren't clipped */
         border-radius: 0 !important;
         overflow: visible !important;
     }
 
-    .fc-scrollgrid-section-header { display: table-header-group !important; }
-    .fc-scrollgrid-section-body { display: table-row-group !important; }
-    .fc-scrollgrid-section { display: table-row !important; }
-    .fc-scrollgrid-section > td { display: table-cell !important; width: 100% !important; }
+    .fc-scrollgrid-section-header {
+        display: table-header-group !important;
+    }
+    .fc-scrollgrid-section-body {
+        display: table-row-group !important;
+    }
+    .fc-scrollgrid-section {
+        display: table-row !important;
+    }
+    .fc-scrollgrid-section > td {
+        display: table-cell !important;
+        width: 100% !important;
+    }
 
     /* Unwrap rows */
-    .fc-scrollgrid tbody { display: contents !important; }
-    
+    .fc-scrollgrid tbody {
+        display: contents !important;
+    }
+
     /* Gutter & Spacer management - Eliminate any right-side padding reservations */
-    .fc-col-header-gutter, 
+    .fc-col-header-gutter,
     .fc-daygrid-day-gutter,
     .fc-resource-group-gutter,
     .fc-scrollgrid-section-footer,
@@ -213,7 +232,7 @@
         padding: 0 !important;
         margin: 0 !important;
         box-sizing: border-box !important;
-        
+
         /* [FIX] Use BOTH LEFT and RIGHT borders (1px) */
         /* In border-collapse: collapse, these 1px borders will merge. */
         /* Having both ensures the browser always draws the boundary even if one side has a background color. */
@@ -242,7 +261,8 @@
         min-height: 120px !important; /* Base structural height */
         height: auto !important;
         overflow: visible !important;
-        padding: 0 !important; /* [FIX] Remove padding here to allow header background to fill width */
+        padding: 0
+            !important; /* [FIX] Remove padding here to allow header background to fill width */
     }
 
     /* [NEW] Apply padding to content containers instead of the frame */
@@ -254,7 +274,8 @@
     }
 
     .calendar-cell-header {
-        position: relative !important; /* Required for triangle absolute positioning */
+        position: relative
+            !important; /* Required for triangle absolute positioning */
         padding-top: 4px !important;
         /* [FIX] Narrow the background by 2px to prevent it from overlapping/thinning borders */
         width: calc(100% - 2px) !important;
@@ -264,7 +285,8 @@
     }
 
     /* [NEW] Restore Triangle indicator for days in the current month */
-    .fc-daygrid-day:not(.fc-day-other):not(.is-other-month) .calendar-cell-header::before {
+    .fc-daygrid-day:not(.fc-day-other):not(.is-other-month)
+        .calendar-cell-header::before {
         content: "" !important;
         position: absolute !important;
         top: 0 !important;
@@ -279,9 +301,12 @@
     }
 
     /* Red triangle for Sat/Sun/Holidays (only in current month) */
-    .fc-day-sun:not(.fc-day-other):not(.is-other-month) .calendar-cell-header::before,
-    .fc-day-sat:not(.fc-day-other):not(.is-other-month) .calendar-cell-header::before,
-    .is-holiday:not(.fc-day-other):not(.is-other-month) .calendar-cell-header::before {
+    .fc-day-sun:not(.fc-day-other):not(.is-other-month)
+        .calendar-cell-header::before,
+    .fc-day-sat:not(.fc-day-other):not(.is-other-month)
+        .calendar-cell-header::before,
+    .is-holiday:not(.fc-day-other):not(.is-other-month)
+        .calendar-cell-header::before {
         border-top-color: #dc2626 !important;
     }
 
@@ -315,7 +340,10 @@
         width: 100% !important;
         overflow: hidden !important;
     }
-    .list-day-block { break-inside: avoid !important; margin-bottom: 20px !important; }
+    .list-day-block {
+        break-inside: avoid !important;
+        margin-bottom: 20px !important;
+    }
     .list-1week-print-cols {
         column-count: 2 !important;
         column-gap: 2rem !important;
@@ -323,16 +351,130 @@
     }
 
     /* 5. Dept View Support (Table-based) */
-    #dept-view-table {
+    #dept-view-table,
+    .dept-print-table {
         table-layout: fixed !important;
         width: 100% !important;
         border-collapse: collapse !important;
     }
-    #dept-view-table td, #dept-view-table th {
+    #dept-view-table tr,
+    .dept-print-table tr {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+    }
+    #dept-view-table td, #dept-view-table th,
+    .dept-print-table td, .dept-print-table th {
         font-size: 10pt !important;
         padding: 4px !important;
         vertical-align: top !important;
-        border: 1px solid #ccc !important; /* Keep subtle lines for Dept View as requested previously */
+        border: 1px solid #ccc
+            !important; /* Keep subtle lines for Dept View as requested previously */
     }
-    #dept-view-table .col-date { width: 40px !important; text-align: center; }
+    #dept-view-table .col-date,
+    .dept-print-table .col-date {
+        width: 40px !important;
+        text-align: center;
+    }
+}
+
+/* [FIX] Department List View - Remove fixed width in print */
+#dept-view-table .col-dept,
+.dept-print-table .col-dept {
+    width: auto !important;
+    min-width: 0 !important;
+}
+
+/* [FIX] Thicker Bottom Border for Sunday Row */
+.dept-print-table tr.row-sunday td {
+    border-bottom: 1.5px solid #000 !important;
+}
+
+/* [FIX] Page Break Class used in Dept Print Pagination */
+.print-page-break {
+    page-break-before: always !important;
+    break-before: page !important;
+    display: block;
+    height: 1px;
+    width: 100%;
+}
+
+/* ==========================================================================
+   6. WEEKLY PLAN PRINT STYLES (Restored & Refined)
+   ========================================================================== */
+
+/* [FIX] Layout Boundary Wrapper to prevent phantom pages */
+.list-view-print-wrapper {
+    display: grid !important;
+    grid-template-rows: min-content minmax(0, 1fr) !important;
+    row-gap: 0 !important; /* [FIX] Reset gap, use margin on header container */
+    height: 175mm !important; /* [FIX] Conservative height */
+    max-height: 175mm !important;
+    overflow: hidden !important;
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+    margin-bottom: 0 !important;
+    width: 100% !important;
+}
+
+/* [FIX] Header Container Spacing (Title + Date/School + Holidays) */
+.list-view-print-wrapper > div:first-child,
+.print-header-container {
+    margin-bottom: 30px !important; /* [FIX] Adjusted to 30px as requested */
+}
+
+/* [FIX] Column Container */
+.list-1week-print-cols {
+    display: block !important;
+    column-count: 2 !important;
+    column-gap: 40px !important;
+    column-fill: auto !important;
+    height: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+}
+
+/* [FIX] Day Block Styling */
+.list-day-block {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    -webkit-column-break-inside: avoid !important;
+    display: block !important;
+    width: 100% !important;
+    margin-bottom: 60px !important; /* [FIX] as requested */
+}
+
+/* [FIX] Remove bottom margin from last element */
+.list-day-block:last-child {
+    margin-bottom: 0 !important;
+}
+
+/* [FIX] Date Divider Line (Targeting the div wrapper of the date) */
+.list-day-block > div:first-child {
+    border-top: 3px solid #000 !important;
+    padding-top: 5px !important;
+    margin-bottom: 10px !important;
+}
+
+/* [FIX] Header Divider Line */
+.list-view-print-wrapper h1,
+.list-view-print-wrapper .print-header h1,
+.print\:block h1 {
+    border-bottom: 2px solid #000 !important;
+    border-bottom-style: solid !important;
+    border-bottom-width: 2px !important;
+    border-bottom-color: #000 !important;
+    padding-bottom: 10px !important;
+    margin-bottom: 10px !important; /* [FIX] Reset internal margin */
+    display: block !important; /* Ensure it's a block to take width */
+    width: 100% !important;
+}
+
+/* [FIX] Hide Scrollbars Globally in Print */
+::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
 }

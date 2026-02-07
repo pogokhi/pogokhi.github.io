@@ -251,6 +251,7 @@ const App = {
     },
 
     navigate: function (viewName, replace = false) {
+        console.log(`[Nav] Navigate to: ${viewName}`);
         try {
             // [SYNC] Capture date from current view before switching
             const sharedDate = this.captureCurrentDate();
@@ -554,7 +555,21 @@ const App = {
             if (isAdmin) {
                 const btnAdmin = document.getElementById('btn-admin');
                 if (btnAdmin) {
-                    btnAdmin.onclick = () => this.navigate('admin');
+                    btnAdmin.onclick = () => {
+                        console.log("[UI] Admin Button Clicked", this);
+                        try {
+                            if (typeof this.navigate === 'function') {
+                                this.navigate('admin');
+                            } else {
+                                console.error("[UI] Critical: this.navigate is not a function", this);
+                                // Fallback
+                                window.location.hash = 'admin';
+                                location.reload();
+                            }
+                        } catch (err) {
+                            console.error("[UI] Admin Click Error:", err);
+                        }
+                    };
                 }
             }
         } else {
@@ -605,6 +620,7 @@ const App = {
     },
 
     loadView: async function (viewName) {
+        console.log(`[View] Loading view: ${viewName}`);
         const container = document.getElementById('view-container');
 
         // Cleanup content
@@ -3226,7 +3242,7 @@ const App = {
             // Print Header
             if (!isScreenOnly) {
                 html += `
-                <div class="text-center mb-4 hidden print:block">
+                <div class="print-header-container text-center mb-4 hidden print:block">
                     <h1 class="text-3xl font-bold border-b-2 border-black pb-4 mb-2">주간 계획서</h1>
                         <div class="flex justify-between items-end">
                             <div class="text-[16px] font-bold">${rangeBase}</div>
@@ -3464,11 +3480,11 @@ const App = {
 
                 <!--Print Version-->
     <div class="hidden print:block">
-        <div>
+        <div class="list-view-print-wrapper">
             ${generateHeaderHtml(w1Start, w1End, false, true)}
             <div class="list-1week-print-cols">${week1Html}</div>
         </div>
-        <div style="break-before: page;">
+        <div class="list-view-print-wrapper" style="break-before: page;">
             ${generateHeaderHtml(w2Start, w2End, false, true)}
             <div class="list-1week-print-cols">${week2Html}</div>
         </div>
@@ -3549,7 +3565,172 @@ const App = {
         this.renderDeptListView();
     },
 
+
+
+    // [NEW] Print-Specific Dept View with Balanced Pagination
+    renderDeptListViewPrint: async function (size, orient, customStart, customEnd) {
+        const wrapper = document.getElementById('dept-view-content-wrapper'); // We will temporarily hide this or append to a print container
+        const printContainerId = 'dept-print-container';
+        let printContainer = document.getElementById(printContainerId);
+
+        // cleanup previous
+        if (printContainer) printContainer.remove();
+
+        printContainer = document.createElement('div');
+        printContainer.id = printContainerId;
+        printContainer.className = 'w-full h-full'; 
+        // Insert after main content
+        document.body.appendChild(printContainer);
+
+        // Hide normal views handled by CSS print media, but we need to ensure this container is visible ONLY in print
+        // Actually, executePrint handles class 'printing-mode', we can style this container to be visible only then if needed.
+        // For now, simple DOM insertion.
+
+        const date = this.state.deptViewDate;
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        const mm = month + 1;
+        const ay = (mm < 3) ? year - 1 : year;
+
+        // Fetch Data
+        const departments = await this.fetchDepartmentsWithFallback(ay);
+        const activeDepts = (departments || []).filter(d => d.is_active);
+        const schedules = await this.fetchSchedules();
+        const holidays = this.calculateMergedHolidays(ay);
+
+        // Determine Range
+        const startOfMonth = new Date(year, month, 1);
+        const endOfMonth = new Date(year, month + 1, 0);
+        const finalStart = customStart ? new Date(customStart) : startOfMonth;
+        const finalEnd = customEnd ? new Date(customEnd) : endOfMonth;
+
+        // [FIX] Update Print Header Range Text
+        const printRange = document.getElementById('dept-print-range');
+        if (printRange) {
+             printRange.textContent = `${this.formatLocal(finalStart)} ~ ${this.formatLocal(finalEnd)} `;
+        }
+
+        // Balanced Pagination Logic
+        const N = activeDepts.length;
+        // [FIX] Apply split logic ONLY for A4 as requested
+        const MAX_PER_PAGE = (size === 'A4') ? 8 : N;
+        const numPages = Math.ceil(N / MAX_PER_PAGE);
+        const baseSize = Math.floor(N / numPages);
+        const remainder = N % numPages;
+
+        let deptIndex = 0;
+        const chunks = [];
+        for (let i = 0; i < numPages; i++) {
+            const chunkSize = baseSize + (i < remainder ? 1 : 0);
+            const chunk = activeDepts.slice(deptIndex, deptIndex + chunkSize);
+            chunks.push(chunk);
+            deptIndex += chunkSize;
+        }
+
+        // Helper to check overlap
+        const checkOverlap = (evStart, evEnd, targetDateStr) => {
+            if (evStart === targetDateStr) return true;
+            if (!evEnd) return false;
+            return (targetDateStr >= evStart && targetDateStr <= evEnd);
+        };
+
+        const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+
+        // Render Pages
+        let htmlBuffer = '';
+        
+        chunks.forEach((chunkDepts, pageIdx) => {
+            if (pageIdx > 0) {
+                htmlBuffer += `<div class="print-page-break"></div>`;
+            }
+
+            // Page Header (Optional, if we want repeated headers per page)
+            // The user requested split, usually this implies repeating the Date column + Subset of Depts
+            
+            // Start Table
+            htmlBuffer += `
+                <div class="print-page-wrapper" style="width: 100%; margin-bottom: 20px;">
+                   <table class="dept-print-table border-separate border-spacing-0 table-fixed w-full" style="border-collapse: collapse; width: 100%;">
+                        <thead>
+                            <tr>
+                                <th class="col-date" style="width: 40px; border: 1px solid #999; text-align: center; background: #eee;">날짜</th>
+            `;
+
+            // Dept Headers
+            chunkDepts.forEach(d => {
+                 const color = d.dept_color || '#ccc';
+                 htmlBuffer += `
+                    <th class="col-dept" style="border: 1px solid #999; border-left: none; box-shadow: inset 0 -5px 0 ${color}; padding: 4px;">
+                        ${d.dept_short || d.dept_name}
+                    </th>
+                 `;
+            });
+            htmlBuffer += `</tr></thead><tbody>`;
+
+            // Rows
+            let curr = new Date(finalStart);
+            while (curr <= finalEnd) {
+                const d = curr.getDate();
+                const dDate = new Date(curr); // Clone
+                const dateStr = this.formatLocal(dDate);
+                const dayNum = dDate.getDay();
+                const holidayName = holidays[dateStr];
+
+                let rowClass = '';
+                if (dayNum === 0) rowClass = 'row-sunday';
+                else if (dayNum === 1) rowClass = 'row-monday'; // Shared Logic
+                else if (dayNum === 6) rowClass = 'row-saturday';
+                if (holidayName) rowClass += ' row-holiday'; // Append
+
+                const dayLabel = `${d}<span style="font-size: 11px;">(${dayNames[dayNum]})</span>`;
+                const dateStyle = (dayNum === 0 || holidayName) ? 'color: red;' : (dayNum === 6 ? 'color: blue;' : '');
+                const displayHoliday = ''; // [FIX] Remove holiday from date column (moved to Dept column)
+
+                // Date Cell
+                htmlBuffer += `<tr class="${rowClass}">
+                    <td class="col-date" style="border: 1px solid #e5e7eb; border-top: none; text-align: center; vertical-align: top; padding: 4px; ${dateStyle}">
+                        <div>${dayLabel}</div>
+                        ${displayHoliday}
+                    </td>
+                `;
+
+                // Dept Cells
+                chunkDepts.forEach(dept => {
+                    // Filter events for this dept & date
+                    const evts = schedules.filter(s => {
+                        if (s.dept_id !== dept.id) return false;
+                        return checkOverlap(s.start_date, s.end_date, dateStr);
+                    });
+
+                    htmlBuffer += `<td class="col-dept" style="border: 1px solid #e5e7eb; border-top: none; border-left: none; padding: 4px; vertical-align: top;">`;
+                    
+                    // [FIX] Inject Holiday Name for '교무기획부' (Teaching Affairs) - Same Font Size
+                    if (holidayName && (dept.dept_name.includes('교무') || dept.dept_name.includes('Academic'))) {
+                         htmlBuffer += `<div class="dept-event-item" style="color: red; background-color: #fef2f2; font-size: 9px;">${holidayName}</div>`;
+                    }
+
+                    evts.forEach(e => {
+                         let displayText = e.title;
+                         if (e.description) displayText += `(${e.description})`;
+                         const isMulti = (e.start_date !== e.end_date && e.end_date);
+                         const style = isMulti ? 'background-color: #f3f4f6; border-radius: 4px;' : '';
+                         htmlBuffer += `<div class="dept-event-item" style="${style}">${displayText}</div>`;
+                    });
+                    htmlBuffer += `</td>`;
+                });
+
+                htmlBuffer += `</tr>`;
+                curr.setDate(curr.getDate() + 1);
+            }
+
+            htmlBuffer += `</tbody></table></div>`;
+        });
+
+        printContainer.innerHTML = htmlBuffer;
+    },
+
     renderDeptListView: async function (customStart, customEnd) {
+    
         const thead = document.getElementById('dept-view-thead');
         const tbody = document.getElementById('dept-view-tbody');
         const selYear = document.getElementById('dept-nav-year');
@@ -3583,7 +3764,7 @@ const App = {
         const printSchool = document.getElementById('dept-print-school');
 
         if (printRange) {
-            printRange.textContent = `${this.formatLocal(finalStart)} ~${this.formatLocal(finalEnd)} `;
+            printRange.textContent = `${this.formatLocal(finalStart)} ~ ${this.formatLocal(finalEnd)} `;
         }
         if (printSchool) {
             const s = this.state.currentSettings;
@@ -3791,6 +3972,15 @@ const App = {
     // --- Data Fetching ---
 
     fetchSettings: async function (targetYear = null) {
+        // [CACHE] Check if we already have settings for this year
+        // Initialize cache container if needed
+        if (!this.state.cache.settings) this.state.cache.settings = {};
+
+        // If specific year requested, check cache
+        if (targetYear && this.state.cache.settings[targetYear]) {
+            return this.state.cache.settings[targetYear];
+        }
+
         let query = window.SupabaseClient.supabase
             .from('settings')
             .select('*');
@@ -3840,9 +4030,17 @@ const App = {
             }
 
             if (csatItem) {
-                console.log("[CSAT] Found:", csatItem);
-                this.state.csatDate = csatItem.start_date;
+                // [FIX] Prevent redundant logging
+                if (this.state.csatDate !== csatItem.start_date) {
+                     console.log("[CSAT] Found:", csatItem);
+                     this.state.csatDate = csatItem.start_date;
+                }
             }
+        }
+
+        // [CACHE] Store result
+        if (result.academic_year) {
+             this.state.cache.settings[result.academic_year] = result;
         }
 
         return result;
@@ -4723,45 +4921,29 @@ const App = {
     calculateDeptPrintRange: function (year, month, front2, back2) {
         const startOfMonth = new Date(year, month - 1, 1);
         const endOfMonth = new Date(year, month, 0);
-        const day15 = new Date(year, month - 1, 15);
-        const dayOf15 = day15.getDay(); // 0=Sun...
+        const startDay = startOfMonth.getDay(); // 0=Sun, 6=Sat
 
-        const getMonday = (d) => {
-            const date = new Date(d);
-            const day = date.getDay();
-            const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-            return new Date(date.setDate(diff));
-        };
-        const getSunday = (d) => {
-            const mon = getMonday(d);
-            return new Date(new Date(mon).setDate(mon.getDate() + 6));
-        };
+        // Determine Split Date (Last day of "Front 2 Weeks")
+        // Rule: If starts on Sat -> 16th. If Sun -> 15th. Default -> 15th.
+        let splitDateNum = 15;
+        if (startDay === 6) { // Saturday
+            splitDateNum = 16;
+        } else if (startDay === 0) { // Sunday
+            splitDateNum = 15;
+        }
 
         let start, end;
 
-        if (front2 && back2) {
-            start = getMonday(startOfMonth);
-            end = getSunday(endOfMonth);
-        } else if (front2) {
-            start = getMonday(startOfMonth);
-            if (dayOf15 >= 4 && dayOf15 <= 6) { // Thu, Fri, Sat
-                end = getSunday(day15);
-            } else { // Sun, Mon, Tue, Wed
-                const prevSun = new Date(day15);
-                prevSun.setDate(day15.getDate() - dayOf15);
-                if (dayOf15 === 0) prevSun.setDate(day15.getDate() - 7);
-                end = prevSun;
-            }
-        } else if (back2) {
-            if (dayOf15 >= 4 && dayOf15 <= 6) { // Thu, Fri, Sat
-                const nextMon = new Date(getSunday(day15));
-                nextMon.setDate(nextMon.getDate() + 1);
-                start = nextMon;
-            } else { // Sun, Mon, Tue, Wed
-                start = getMonday(day15);
-            }
-            end = getSunday(endOfMonth);
+        if (front2 && !back2) {
+            // Front 2 Weeks: 1st ~ SplitDate
+            start = startOfMonth;
+            end = new Date(year, month - 1, splitDateNum);
+        } else if (back2 && !front2) {
+            // Back 2 Weeks: (SplitDate + 1) ~ EndOfMonth
+            start = new Date(year, month - 1, splitDateNum + 1);
+            end = endOfMonth;
         } else {
+            // Full Month (or both checked, which usually means full)
             start = startOfMonth;
             end = endOfMonth;
         }
@@ -4790,9 +4972,14 @@ const App = {
         }
 
         // 2. Prepare View
-        if (viewType === 'dept_list' && customStart && customEnd) {
-            await this.renderDeptListView(customStart, customEnd);
-        } else if (viewType === 'weekly_plan' || viewType === 'dept_list') {
+        if (viewType === 'dept_list') {
+             // [FIX] Use Print-Specific Renderer for Balanced Pagination
+             if (customStart && customEnd) {
+                 await this.renderDeptListViewPrint(size, orient, customStart, customEnd);
+             } else {
+                 await this.renderDeptListViewPrint(size, orient);
+             }
+        } else if (viewType === 'weekly_plan') {
             // Just render current month if no custom range but dept_list
             if (viewType === 'dept_list') await this.renderDeptListView();
         } else if (this.state.calendar) {
