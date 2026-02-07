@@ -2321,7 +2321,7 @@ const App = {
             // 1. Find Orphaned Schedules (dept_id IS NULL AND dept_name IS NOT NULL)
             const { data: orphans, error } = await window.SupabaseClient.supabase
                 .from('schedules')
-                .select('id, dept_name, start_date, end_date, title, academic_year, weekend, is_printable, description, visibility, author_id')
+                .select('id, dept_name, start_date, end_date, title, weekend, is_printable, description, visibility, author_id')
                 .is('dept_id', null)
                 .neq('dept_name', null)
                 .neq('dept_name', ''); // Ensure valid name
@@ -2381,7 +2381,7 @@ const App = {
                             title: sch.title, // [FIX] Include required fields for upsert
                             start_date: sch.start_date || sch.start_date, // Should be present
                             end_date: sch.end_date || sch.start_date,
-                            academic_year: sch.academic_year || ay,
+                            // academic_year removed - not in DB
                             weekend: sch.weekend,
                             is_printable: sch.is_printable !== false, // careful with default
                             description: sch.description,
