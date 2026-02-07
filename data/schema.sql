@@ -27,7 +27,7 @@ BEGIN
     WHERE user_id = auth.uid() AND role = 'admin'
   );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- user_roles Policies
 CREATE POLICY "Public Read User Roles" ON public.user_roles FOR SELECT TO public USING (true);
@@ -168,7 +168,7 @@ ALTER TABLE public.error_logs ENABLE ROW LEVEL SECURITY;
 
 -- error_logs Policies
 -- NOTICE: This 'TO public' policy triggers a Supabase warning but is intentional for capturing guest errors.
-CREATE POLICY "Public Insert Logs" ON public.error_logs FOR INSERT TO public WITH CHECK (true);
+CREATE POLICY "Public Insert Logs" ON public.error_logs FOR INSERT TO public WITH CHECK (error_message IS NOT NULL);
 -- Read policy for Admins only
 CREATE POLICY "Admins Read Logs" ON public.error_logs FOR SELECT TO authenticated 
     USING (is_admin());

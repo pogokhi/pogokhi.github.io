@@ -2567,6 +2567,10 @@ const App = {
             }
         }
     },
+
+
+
+
     initCalendar: async function () {
         const calendarEl = document.getElementById('calendar');
         if (!calendarEl) return;
@@ -2850,9 +2854,9 @@ const App = {
 
                 // Remove default FullCalendar containers that might cause whitespace or layout issues
                 const eventsContainer = arg.el.querySelector('.fc-daygrid-day-events');
-                const topContainer = arg.el.querySelector('.fc-daygrid-day-top');
+                // const topContainer = arg.el.querySelector('.fc-daygrid-day-top'); // [FIX] Do NOT remove top container, we are using it
                 if (eventsContainer) eventsContainer.remove();
-                if (topContainer) topContainer.remove();
+                // if (topContainer) topContainer.remove();
 
                 // [BORDRE FIX] Note: Background color is now managed via CSS classes in dayCellClassNames 
                 // for better reactivity across month navigations and FullCalendar re-renders.
@@ -3819,6 +3823,26 @@ const App = {
                 .eq('academic_year', result.academic_year);
 
             result.basic_schedules = basicSchedules || [];
+
+            // [CSAT] Detect College Scholastic Ability Test Date for D-Day
+            this.state.csatDate = null;
+            
+            // 1. Check Basic Schedules
+            let csatItem = result.basic_schedules.find(s => s.name && s.name.includes('대학수학능력시험'));
+            
+            // 2. Check Variable Holidays (JSON in settings) if not found
+            if (!csatItem && result.variable_holidays) {
+                const vHolidays = result.variable_holidays;
+                const entry = Object.entries(vHolidays).find(([date, name]) => name.includes('대학수학능력시험'));
+                if (entry) {
+                    csatItem = { start_date: entry[0], name: entry[1] };
+                }
+            }
+
+            if (csatItem) {
+                console.log("[CSAT] Found:", csatItem);
+                this.state.csatDate = csatItem.start_date;
+            }
         }
 
         return result;
@@ -5868,7 +5892,7 @@ const App = {
 
         const headerRow = document.createElement('div');
         headerRow.style.display = 'grid';
-        headerRow.style.gridTemplateColumns = '42px minmax(0, 1fr)';
+        headerRow.style.gridTemplateColumns = '42px minmax(0, 1fr) auto';
         headerRow.style.alignItems = 'baseline';
         headerRow.style.width = '100%';
         headerRow.style.marginBottom = '2px';
@@ -5948,6 +5972,40 @@ const App = {
             headerRow.appendChild(nameContainer);
         } else {
             headerRow.appendChild(document.createElement('div'));
+        }
+
+        // [D-Day Logic]
+        if (this.state.csatDate) {
+            const parts = this.state.csatDate.split('-');
+            const cYear = parseInt(parts[0]);
+            const cMonth = parseInt(parts[1]);
+            const cDay = parseInt(parts[2]);
+
+            // CSAT is in Nov, Start counting from March 1st of the SAME year
+            const start = new Date(cYear, 2, 1); // March 1st
+            const csat = new Date(cYear, cMonth - 1, cDay);
+            const current = new Date(arg.date.getFullYear(), arg.date.getMonth(), arg.date.getDate());
+
+            const dTime = current.getTime();
+            const sTime = start.getTime();
+            const cTime = csat.getTime();
+
+            if (dTime >= sTime && dTime <= cTime) {
+                const diffMs = cTime - dTime;
+                const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+                const suffix = (diffDays === 0) ? 'Day' : diffDays;
+
+                const dDayBadge = document.createElement('div');
+                dDayBadge.className = 'd-day-text no-print text-[0.7rem] font-bold mr-1 select-none';
+                dDayBadge.style.whiteSpace = 'nowrap';
+                // User Request: "D-" in Black, Number/Day in Red
+                dDayBadge.innerHTML = `<span class="text-black">D-</span><span class="text-red-600">${suffix}</span>`;
+                headerRow.appendChild(dDayBadge);
+            } else {
+                headerRow.appendChild(document.createElement('div')); // Empty placeholder for grid
+            }
+        } else {
+            headerRow.appendChild(document.createElement('div')); // Empty placeholder for grid
         }
 
         headerGroup.appendChild(headerRow);
