@@ -3699,6 +3699,31 @@ const App = {
                     // Filter events for this dept & date
                     const evts = schedules.filter(s => {
                         if (s.dept_id !== dept.id) return false;
+                        
+                        // [FIX] Privacy Check for Print View - MATCHING SCREEN LOGIC
+                        const role = this.state.role;
+                        const isSuperOrAdmin = role === 'super_admin' || role === 'admin';
+                        
+                        let isMyDept = false;
+                        if (this.state.user && this.state.user.dept_id) {
+                            if (String(this.state.user.dept_id) === String(dept.id)) isMyDept = true;
+                        } else if (this.state.myDeptId) {
+                             if (String(this.state.myDeptId) === String(dept.id)) isMyDept = true;
+                        }
+
+                        // 1. Dept Visibility
+                        if (s.visibility === 'dept') {
+                            if (!isSuperOrAdmin && !isMyDept) return false;
+                        }
+                        
+                        // 2. Private Visibility
+                        if (s.visibility === 'private') {
+                            const isCreator = this.state.user && s.user_id && String(s.user_id) === String(this.state.user.id);
+                            if (!isSuperOrAdmin && !isCreator) return false;
+                        }
+
+                        // 3. Public is always shown (unless guest logic overrides, but print is authorized context usually)
+
                         return checkOverlap(s.start_date, s.end_date, dateStr);
                     });
 
@@ -4955,6 +4980,10 @@ const App = {
     },
 
     executePrint: async function (size, orient, isScale, viewType, customStart, customEnd) {
+        // [FIX] Cleanup any lingering print containers from other views
+        const oldDeptContainer = document.getElementById('dept-print-container');
+        if (oldDeptContainer) oldDeptContainer.remove();
+
         this.closeModal();
 
         // Store original state if custom range is used
