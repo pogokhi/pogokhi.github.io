@@ -3353,6 +3353,20 @@ const App = {
                 const bStart = b.start_date;
                 const bEnd = b.end_date || b.start_date;
                 if (checkOverlap(bStart, bEnd, dateStr)) {
+                    // [FIX] Exam: Do NOT show on Weekends or Holidays (Weekly Plan)
+                    if (b.type === 'exam') {
+                        const day = dateObj.getDay();
+                        // 1. Weekend Check
+                        if (day === 0 || day === 6) return;
+                        
+                        // 2. Holiday Check (Check if any holiday exists on this date)
+                        const isHoliday = basicSchedules.some(h => 
+                            (h.type === 'holiday' || h.is_holiday) && 
+                            checkOverlap(h.start_date, h.end_date || h.start_date, dateStr)
+                        );
+                        if (isHoliday) return;
+                    }
+
                     dailyBasics.push(b);
                 }
             });
@@ -3399,6 +3413,24 @@ const App = {
                 });
             }
 
+            // [NEW] Inject Fixed Env Events -> Science (Weekly Plan)
+            if (this.FIXED_ENV_EVENTS) {
+                const parts = dateStr.split('-');
+                const mmdd = `${parts[1]}-${parts[2]}`;
+                const envTitle = this.FIXED_ENV_EVENTS[mmdd];
+
+                if (envTitle) {
+                    let scienceDept = departments.find(d => d.dept_name && d.dept_name.includes('과학'));
+                    const deptName = scienceDept ? scienceDept.dept_name : '과학정보부';
+                    if (!groups[deptName]) groups[deptName] = [];
+
+                    const exists = groups[deptName].some(g => g.title === envTitle);
+                    if (!exists) {
+                        groups[deptName].push({ title: envTitle, desc: '환경기념일' });
+                    }
+                }
+            }
+
             const hasEvents = Object.keys(groups).length > 0;
             const isRedDay = dateObj.getDay() === 0;
 
@@ -3411,7 +3443,7 @@ const App = {
                 dayHtml += `
                 <div class="list-day-block break-inside-avoid">
                         <div class="border-t-[3px] border-black bg-white pt-1 px-1 mb-2">
-                            <span class="text-[12px] leading-[1.3] font-bold ${isRedDay ? 'text-red-600' : 'text-gray-900'}">
+                            <span class="text-[12px] leading-[1.3] font-bold text-gray-900">
                                 ${yearStr}년 ${monthStr}월 ${dateNumStr}일 (${dayName}요일)
                             </span>
                         </div>
@@ -3803,6 +3835,8 @@ const App = {
 
         // 2. Data
         const schedules = await this.fetchSchedules();
+        const settings = await this.fetchSettings(ay); // Ensure we have basic schedules
+        const basicSchedules = settings.basic_schedules || [];
 
         const holidays = this.calculateMergedHolidays(ay);
 
@@ -3910,24 +3944,55 @@ const App = {
                 deptSchedules = [...deptSchedules];
 
                 // 2. Inject Virtual Events
-                // Kyomu -> Holidays
-                if (dept.dept_short === '교무' && holidayName) {
-                    // Check duplicate to avoid double showing if manually added
-                    if (!deptSchedules.some(s => s.title === holidayName)) {
-                        deptSchedules.push({ title: holidayName, description: '' });
-                    }
+                // Kyomu -> Holidays AND Basic Schedules (Terms, Exams, Vacations)
+                if (dept.dept_name.includes('교무')) {
+                   // A. Holidays
+                   if (holidayName) {
+                        if (!deptSchedules.some(s => s.title === holidayName)) {
+                            deptSchedules.push({ title: holidayName, description: '' });
+                        }
+                   }
+                   // B. Basic Schedules (Inject all types: term, exam, vacation, event)
+                   basicSchedules.forEach(bs => {
+                       // [FIX] Vacation: Do NOT show in Kyomu column
+                       if (bs.type === 'vacation') return;
+
+                       // Check range overlap
+                       let bStart = bs.start_date;
+                       let bEnd = bs.end_date || bs.start_date;
+                       if (checkOverlap(bStart, bEnd, dateStr)) {
+                           // [FIX] Exam: Do NOT show on Weekends or Holidays
+                           if (bs.type === 'exam') {
+                               const day = curr.getDay();
+                               const isOff = (day === 0 || day === 6 || holidays[dateStr]);
+                               if (isOff) return;
+                           }
+
+                           // Deduplication logic
+                           // Check by title (s.title)
+                           // Note: basic schedules might share names with holidays, we allow duplicates if they are distinct entities or just merge?
+                           // User said "All basic schedules". 
+                           // Avoid adding if EXACT title already exists (e.g. holiday name match)
+                           if (!deptSchedules.some(s => s.title === bs.name)) {
+                                deptSchedules.push({ 
+                                    title: bs.name, 
+                                    description: bs.type === 'term' ? '개학' : (bs.type === 'exam' ? '고사' : '') 
+                                });
+                           }
+                       }
+                   });
                 }
 
                 // Science -> Env Events
-                if (dept.dept_short === '과학') {
+                if (dept.dept_name.includes('과학')) {
                     const mm = String(curr.getMonth() + 1).padStart(2, '0');
                     const dd = String(curr.getDate()).padStart(2, '0');
-                    const envKey = `${mm} -${dd} `;
-                    const envEvent = this.FIXED_ENV_EVENTS[envKey];
+                    const envKey = `${mm}-${dd}`; // Note: FIXED_ENV_EVENTS uses "MM-DD" format
+                    const envEvent = this.FIXED_ENV_EVENTS ? this.FIXED_ENV_EVENTS[envKey] : null;
 
                     if (envEvent) {
                         if (!deptSchedules.some(s => s.title === envEvent)) {
-                            deptSchedules.push({ title: envEvent, description: '' });
+                            deptSchedules.push({ title: envEvent, description: '환경기념일' });
                         }
                     }
                 }
@@ -4337,7 +4402,8 @@ const App = {
                 const normTitle = normalize(s.title);
                 const hasConflict = adminEventMap[s.start_date] && adminEventMap[s.start_date].has(normTitle);
 
-                if (hasConflict) return;
+                // [FIX] Allow injected schedules (Basic & Env) to bypass conflict check
+                if (hasConflict && !s.is_injected) return;
 
                 // GUEST VISIBILITY CHECK: Only show 'public'
                 if (!this.state.user && s.visibility !== 'public') return;
@@ -5931,7 +5997,132 @@ const App = {
             return sStart <= rangeEnd && sEnd >= rangeStart;
         });
 
-        const allEvents = this.transformEvents(filteredSchedules, {}, allDepartments, filteredBasicSchedules);
+        // [NEW] Inject Basic Schedules & Env Events (Strict User Request)
+        const kyomuDept = allDepartments.find(d => d.dept_name && d.dept_name.includes('교무'));
+        const scienceDept = allDepartments.find(d => d.dept_name && d.dept_name.includes('과학'));
+        const injectedSchedules = [];
+
+        // 1. All Basic Schedules -> Kyomu
+        if (kyomuDept) {
+            // Pre-calculate holidays for filtering
+            const ayRef = this.state.viewAcademicYear || this.state.currentYear || new Date().getFullYear();
+            const holidaysMap = this.calculateMergedHolidays(ayRef);
+            // Also need next year if range spans
+            const holidaysNext = this.calculateMergedHolidays(ayRef + 1);
+            const mergedHolidays = { ...holidaysMap, ...holidaysNext };
+
+            filteredBasicSchedules.forEach(bs => {
+                // [FIX] Vacation: Do NOT show in Kyomu column (User Request)
+                if (bs.type === 'vacation') return;
+
+                // [FIX] Exam: Exclude Weekends & Holidays
+                if (bs.type === 'exam') {
+                    const ranges = [];
+                    let curr = this.parseLocal(bs.start_date);
+                    const end = this.parseLocal(bs.end_date || bs.start_date);
+                    
+                    let rangeStart = null;
+                    let lastValidDate = null;
+
+                    while (curr <= end) {
+                        const dKey = this.formatLocal(curr);
+                        const day = curr.getDay();
+                        const isOff = (day === 0 || day === 6 || mergedHolidays[dKey]);
+
+                        if (!isOff) {
+                            if (!rangeStart) rangeStart = new Date(curr);
+                            lastValidDate = new Date(curr);
+                        } else {
+                            // Close current range if active
+                            if (rangeStart && lastValidDate) {
+                                ranges.push({ start: this.formatLocal(rangeStart), end: this.formatLocal(lastValidDate) });
+                                rangeStart = null;
+                                lastValidDate = null;
+                            }
+                        }
+                        curr.setDate(curr.getDate() + 1);
+                    }
+                    // Close final range
+                    if (rangeStart && lastValidDate) {
+                        ranges.push({ start: this.formatLocal(rangeStart), end: this.formatLocal(lastValidDate) });
+                    }
+
+                    // Inject Split Ranges
+                    ranges.forEach((r, idx) => {
+                        injectedSchedules.push({
+                            id: `basic_inj_${bs.id}_${idx}`,
+                            title: bs.name,
+                            start_date: r.start,
+                            end_date: r.end,
+                            dept_id: String(kyomuDept.id),
+                            user_id: 'system',
+                            user_name: '',
+                            visibility: 'public',
+                            is_injected: true,
+                            extendedProps: { 
+                                isPrintable: true, 
+                                description: bs.type_name || '학사일정',
+                                deptId: String(kyomuDept.id),
+                                deptInfo: kyomuDept
+                            }
+                        });
+                    });
+
+                } else {
+                    // Standard Injection for Non-Exams
+                    injectedSchedules.push({
+                        id: `basic_inj_${bs.id}`,
+                        title: bs.name,
+                        start_date: bs.start_date,
+                        end_date: bs.end_date || bs.start_date,
+                        dept_id: String(kyomuDept.id),
+                        user_id: 'system',
+                        user_name: '',
+                        visibility: 'public',
+                        is_injected: true,
+                        extendedProps: { 
+                            isPrintable: true, 
+                            description: bs.type_name || '학사일정',
+                            deptId: String(kyomuDept.id),
+                            deptInfo: kyomuDept
+                        }
+                    });
+                }
+            });
+        }
+
+        // 2. Fixed Env Events -> Science
+        if (scienceDept && this.FIXED_ENV_EVENTS) {
+            Object.entries(this.FIXED_ENV_EVENTS).forEach(([mmdd, title]) => {
+                const [m, d] = mmdd.split('-').map(Number);
+                const eventYear = (m < 3) ? (this.state.viewAcademicYear + 1) : this.state.viewAcademicYear;
+                const dStr = `${eventYear}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
+                if (dStr >= rangeStart && dStr <= rangeEnd) {
+                    injectedSchedules.push({
+                        id: `env_inj_${mmdd}`,
+                        title: title,
+                        start_date: dStr,
+                        end_date: dStr,
+                        dept_id: String(scienceDept.id),
+                        user_id: 'system',
+                        user_name: '',
+                        visibility: 'public',
+                        is_injected: true,
+                        extendedProps: {
+                            isPrintable: true,
+                            description: '환경기념일',
+                            deptId: String(scienceDept.id),
+                            deptInfo: scienceDept
+                        }
+                    });
+                }
+            });
+        }
+
+        const mergedSchedules = [...schedules, ...injectedSchedules];
+
+        const allEvents = this.transformEvents(mergedSchedules, {}, allDepartments, filteredBasicSchedules);
 
         // [SEARCH] Identify "Active" Academic Year for Scoping
         const midDate = new Date(start.getTime() + (end.getTime() - start.getTime()) / 2);
