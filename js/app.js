@@ -177,21 +177,13 @@ const App = {
                     const btn = e.target.closest('#btn-logout');
                     if (btn) {
                         e.preventDefault();
-                        if (!confirm('로그아웃 하시겠습니까?')) return;
-                        
-                        try {
-                            btn.disabled = true;
-                            btn.innerText = '처리중...';
-                            await window.SupabaseClient.supabase.auth.signOut();
-                            this.clearCache();
-                            window.location.reload();
-                        } catch (err) {
-                            console.error("Logout failed:", err);
-                            window.location.reload(); // Fallback
-                        }
+                        this.handleLogout({ confirm: true });
                     }
                 });
             }
+
+            // [NEW] Init Idle Timer
+            this.initIdleTimer();
 
             // 4. Routing & History Setup
 
@@ -6457,6 +6449,80 @@ const App = {
                 }
             });
         });
+    },
+
+    // [NEW] Robust Logout Handler
+    handleLogout: async function(options = { confirm: true }) {
+        if (options.confirm && !confirm('로그아웃 하시겠습니까?')) return;
+        
+        const btn = document.getElementById('btn-logout');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerText = '처리중...';
+        }
+
+        console.log("[Logout] Initiating logout sequence...");
+
+        // 1. Fire-and-forget Supabase SignOut (or wait max 2 seconds)
+        try {
+            const signOutPromise = window.SupabaseClient.supabase.auth.signOut();
+            const timeoutPromise = new Promise(resolve => setTimeout(resolve, 2000));
+            await Promise.race([signOutPromise, timeoutPromise]);
+        } catch (e) {
+            console.warn("[Logout] Supabase signOut error (ignoring):", e);
+        }
+
+        // 2. Force Cleanup immediately
+        console.log("[Logout] Cleaning up local state...");
+        this.clearCache();
+        sessionStorage.clear(); 
+        
+        // [SECURITY] Clear Supabase tokens to prevent zombie login (Auto-relogin on reload)
+        // Supabase uses localStorage with keys starting with 'sb-'
+        Object.keys(localStorage).forEach(key => {
+            if (key.startsWith('sb-') || key === 'pogok_last_view') {
+                localStorage.removeItem(key);
+            }
+        });
+
+        // 3. Hard Reload
+        window.location.reload(); 
+    },
+
+    // [NEW] Idle Timer (Auto Logout)
+    initIdleTimer: function() {
+        const IDLE_TIMEOUT = 60 * 60 * 1000; // 1 Hour
+        const THROTTLE_DELAY = 60 * 1000;    // 1 Minute (Check activity max once per min)
+        let idleTimer;
+        let lastActivity = Date.now();
+        
+        const resetTimer = () => {
+            const now = Date.now();
+            // Optimization: Only reset if enough time has passed since last reset
+            if (now - lastActivity < THROTTLE_DELAY) return;
+            
+            lastActivity = now;
+            if (idleTimer) clearTimeout(idleTimer);
+
+            idleTimer = setTimeout(() => {
+                console.warn("[Auto-Logout] Idle timeout reached.");
+                alert('장시간(1시간) 미사용으로 자동 로그아웃 됩니다.');
+                this.handleLogout({ confirm: false });
+            }, IDLE_TIMEOUT);
+        };
+
+        // Attach listeners to user activity
+        window.onload = resetTimer;
+        document.onmousemove = resetTimer;
+        document.onkeypress = resetTimer;
+        document.ontouchstart = resetTimer;
+        document.onclick = resetTimer;
+        // Optimization: Scroll event can be very frequent, throttle takes care of it but better to limit listener?
+        // Throttling inside handler is sufficient.
+        document.onscroll = resetTimer;
+        
+        console.log("[Auto-Logout] Timer initialized (60min) with 1min throttling.");
+        resetTimer(); // Start immediately
     },
 
     logAction: async function (action, table, targetId, details) {
