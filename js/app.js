@@ -6427,18 +6427,32 @@ const App = {
                 return idxA - idxB;
             });
 
+            let renderedCount = 0; // [NEW] Track visible departments for spacing
             sortedDeptIds.forEach((deptId, idx) => {
-                const group = groups[deptId];
-                const hasPrintableInDept = group.events.some(ev => ev.extendedProps.isPrintable !== false);
+                const group = groups[deptId]; // [FIX] Restore missing group definition
+                // [NEW] Filter events first for De-duplication
+                const visibleEvents = group.events.filter(ev => {
+                    if (data.holidayMap[dateStr] && data.holidayMap[dateStr].includes(ev.title)) {
+                        return false;
+                    }
+                    return true;
+                });
 
-                // Add spacer between different departments
-                if (idx > 0) {
+                // If no events remain after filtering, skip this department entirely
+                if (visibleEvents.length === 0) return;
+
+                const hasPrintableInDept = visibleEvents.some(ev => ev.extendedProps.isPrintable !== false);
+
+                // Add spacer between different visible departments
+                // [FIX] Use renderedCount instead of idx to avoid top spacer if first dept is hidden
+                if (renderedCount > 0) {
                     const spacer = document.createElement('div');
                     spacer.style.height = '12px';
                     // Hide spacer if the following department has no printable content
                     if (!hasPrintableInDept) spacer.classList.add('no-print');
                     container.appendChild(spacer);
                 }
+                renderedCount++;
 
                 const deptDiv = document.createElement('div');
                 deptDiv.className = "w-full text-left mb-1 pl-1";
@@ -6458,7 +6472,8 @@ const App = {
                 `;
                 deptDiv.appendChild(deptHeader);
 
-                group.events.forEach(ev => {
+                visibleEvents.forEach(ev => {
+
                     const evDiv = document.createElement('div');
                     evDiv.className = "schedule-item cursor-pointer hover:bg-gray-100 rounded px-1 py-0.5 break-words flex items-start leading-tight";
                     evDiv.style.fontSize = '10px';
