@@ -30,6 +30,7 @@ html {
 }
 
 @media screen {
+
     html,
     body {
         height: 100vh;
@@ -289,7 +290,8 @@ html {
     border: none !important;
     color: transparent !important;
     opacity: 1 !important;
-    pointer-events: none !important; /* Ensure they don't block clicks */
+    pointer-events: none !important;
+    /* Ensure they don't block clicks */
 }
 
 /* 
@@ -353,8 +355,7 @@ html {
 }
 
 /* Triangle indicator for days in the current month */
-.fc-daygrid-day:not(.fc-day-other):not(.is-other-month)
-    .calendar-cell-header::before {
+.fc-daygrid-day:not(.fc-day-other):not(.is-other-month) .calendar-cell-header::before {
     content: "";
     position: absolute;
     top: 0;
@@ -369,12 +370,9 @@ html {
 }
 
 /* Red triangle for Sat/Sun/Holidays (only in current month) */
-.fc-day-sun:not(.fc-day-other):not(.is-other-month)
-    .calendar-cell-header::before,
-.fc-day-sat:not(.fc-day-other):not(.is-other-month)
-    .calendar-cell-header::before,
-.is-holiday:not(.fc-day-other):not(.is-other-month)
-    .calendar-cell-header::before {
+.fc-day-sun:not(.fc-day-other):not(.is-other-month) .calendar-cell-header::before,
+.fc-day-sat:not(.fc-day-other):not(.is-other-month) .calendar-cell-header::before,
+.is-holiday:not(.fc-day-other):not(.is-other-month) .calendar-cell-header::before {
     border-top-color: #dc2626 !important;
 }
 
@@ -456,6 +454,7 @@ html {
     color: #9ca3af !important;
     /* gray-400 */
 }
+
 /* --- List View Styles --- */
 
 .list-day-block {
@@ -501,8 +500,10 @@ html {
     background-color: #f9fafb;
     text-align: center;
     font-weight: bold;
-    border-right: 2px solid #d1d5db; /* Stronger divide */
-    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05); /* Visual layer separation */
+    border-right: 2px solid #d1d5db;
+    /* Stronger divide */
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
+    /* Visual layer separation */
 }
 
 /* Department Column */
@@ -522,14 +523,15 @@ html {
     font-weight: 700;
     text-align: center;
     vertical-align: middle;
-    box-shadow: inset 0 -1px 0
-        #e5e7eb; /* Keep internal border visible if needed */
-    font-size: 14px
-        !important; /* Unified header font size for screen (aligned with dept names) */
+    box-shadow: inset 0 -1px 0 #e5e7eb;
+    /* Keep internal border visible if needed */
+    font-size: 14px !important;
+    /* Unified header font size for screen (aligned with dept names) */
 }
 
 #dept-view-table thead .col-date {
-    z-index: 50; /* Top-most corner cell */
+    z-index: 50;
+    /* Top-most corner cell */
     left: 0;
 }
 
@@ -537,19 +539,21 @@ html {
 #dept-view-table tr.row-sunday {
     background-color: #fef2f2;
 }
+
 #dept-view-table tr.row-saturday {
     background-color: #eff6ff;
 }
+
 /* Final Solution: Gradient Background Divider (Bypasses border collapse & z-index issues) */
 /* Sunday: Draw 1px black line at the BOTTOM using background gradient */
 #dept-view-table tr.row-sunday td,
 #dept-view-table tr.row-sunday th,
 #dept-view-table tr.row-sunday .col-date {
-    background-image: linear-gradient(to top, #000000 1px, transparent 1px)
-        !important;
+    background-image: linear-gradient(to top, #000000 1px, transparent 1px) !important;
     background-size: 100% 100% !important;
     background-repeat: no-repeat !important;
-    border-bottom: none !important; /* Visual cleanup */
+    border-bottom: none !important;
+    /* Visual cleanup */
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
 }
@@ -558,11 +562,10 @@ html {
 #dept-view-table tr.row-monday td,
 #dept-view-table tr.row-monday th,
 #dept-view-table tr.row-monday .col-date,
-#dept-view-table tr.row-sunday + tr td,
-#dept-view-table tr.row-sunday + tr th,
-#dept-view-table tr.row-sunday + tr .col-date {
-    background-image: linear-gradient(to bottom, #000000 1px, transparent 1px)
-        !important;
+#dept-view-table tr.row-sunday+tr td,
+#dept-view-table tr.row-sunday+tr th,
+#dept-view-table tr.row-sunday+tr .col-date {
+    background-image: linear-gradient(to bottom, #000000 1px, transparent 1px) !important;
     background-size: 100% 100% !important;
     background-repeat: no-repeat !important;
     border-top: none !important;
@@ -574,11 +577,13 @@ html {
     color: #ef4444;
     background-color: #fef2f2;
 }
+
 /* No need to re-declare background/borders for .col-date as they are included above */
 #dept-view-table tr.row-saturday .col-date {
     color: #3b82f6;
     background-color: #eff6ff;
 }
+
 #dept-view-table tr.row-holiday .col-date {
     color: #e11d48;
     background-color: #fff1f2;
@@ -603,6 +608,7 @@ html {
 
 /* Mobile Calendar Horizontal Scroll */
 @media screen and (max-width: 768px) {
+
     /* Unlock wrapper horizontal scroll (Syncs Header & Body) */
     .fc-view-harness {
         overflow-x: auto !important;
@@ -631,26 +637,39 @@ html {
         overflow-y: auto !important;
     }
 }
+
 /* --- Global Header Button Unification --- */
 #main-header .max-w-7xl {
-    height: 64px !important; /* Standard Header Height */
+    height: 64px !important;
+    /* Standard Header Height */
 }
 
 #auth-status {
     display: flex !important;
     align-items: center !important;
-    gap: 6px !important; /* Unified 6px gap */
+    gap: 6px !important;
+    /* Unified 6px gap */
 }
 
-#header-user-info, #view-actions, #header-auth-btn {
+#header-user-info,
+#view-actions,
+#header-auth-btn {
     display: flex !important;
     align-items: center !important;
     gap: 6px !important;
 }
 
-#btn-admin, #btn-logout, #btn-login, #btn-dept-calendar, #btn-list-calendar {
+#btn-admin,
+#btn-logout,
+#btn-login,
+#btn-dept-calendar,
+#btn-list-calendar,
+#btn-print-modal,
+#btn-dept-print,
+#btn-list-print {
     height: 32px !important;
-    padding: 0 12px !important; /* Proper padding for text/icons */
+    padding: 0 12px !important;
+    /* Proper padding for text/icons */
     font-size: 0.85rem !important;
     display: flex !important;
     align-items: center !important;
@@ -662,9 +681,12 @@ html {
 }
 
 #btn-admin {
-    border-color: #e9d5ff !important; /* purple-200 */
-    color: #7e22ce !important; /* purple-700 */
-    background-color: #faf5ff !important; /* purple-50 */
+    border-color: #e9d5ff !important;
+    /* purple-200 */
+    color: #7e22ce !important;
+    /* purple-700 */
+    background-color: #faf5ff !important;
+    /* purple-50 */
 }
 
 /* Specific button icons */
@@ -677,6 +699,7 @@ html {
     #main-header .max-w-7xl {
         height: 52px !important;
     }
+
     #btn-admin,
     #btn-logout,
     #btn-login,
@@ -691,16 +714,21 @@ html {
 /* FullCalendar Cell Backgrounds (Applied via dayCellClassNames) */
 .calendar-cell-header {
     background-color: #ffffff;
-} /* Opaque default to mask scrolling content */
+}
+
+/* Opaque default to mask scrolling content */
 .fc-daygrid-day.is-holiday .calendar-cell-header {
     background-color: #fef2f2 !important;
 }
+
 .fc-daygrid-day.is-vacation .calendar-cell-header {
     background-color: #fffcfc !important;
 }
+
 .fc-daygrid-day.is-exam .calendar-cell-header {
     background-color: #fff7ed !important;
 }
+
 .fc-daygrid-day.is-major .calendar-cell-header {
     background-color: #eff6ff !important;
 }

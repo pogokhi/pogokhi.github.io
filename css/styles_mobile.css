@@ -3,24 +3,23 @@
   Only active for screens <= 1024px or touch devices.
 */
 
-/* 1. Hide Print Feature on Mobile/Tablet */
-/* Only hide when a coarse pointer (touchscreen) is detected, regardless of width. 
-   This ensures PC users can see the print button even in small windows. */
-@media (pointer: coarse), screen and (max-width: 768px) {
-    #btn-print-modal, 
-    #btn-print-direct, 
-    #btn-dept-print, 
-    #btn-list-print, 
-    .no-mobile-print,
-    .btn-print {
+/* 1. Hide Print Feature on Mobile (Small Screens) */
+@media screen and (max-width: 768px) {
+
+    #btn-print-modal,
+    #btn-dept-print,
+    #btn-list-print,
+    .no-mobile-print {
         display: none !important;
     }
 }
 
 @media screen and (max-width: 768px) {
+
     /* 2. Global Layout Adjustments */
     #main-content {
-        padding: 8px 4px !important; /* Narrower padding for small screens */
+        padding: 8px 4px !important;
+        /* Narrower padding for small screens */
     }
 
     /* 3. Dept List View Optimization */
@@ -36,28 +35,34 @@
     }
 
     /* Styles for the Dept Toolbar on Mobile */
-    h2#dept-view-title, h2#list-view-title {
+    h2#dept-view-title,
+    h2#list-view-title {
         font-size: 0.95rem !important;
-        margin-right: 0 !important; /* Remove margin to keep Nav close */
+        margin-right: 0 !important;
+        /* Remove margin to keep Nav close */
         text-align: left !important;
     }
 
     /* Left Group Container (Title + Nav) - Both on the Left side */
-    div:has(> #dept-view-title), div:has(> #list-view-title) {
+    div:has(> #dept-view-title),
+    div:has(> #list-view-title) {
         display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
         align-items: center !important;
         justify-content: flex-start !important;
-        gap: 8px !important; /* Distance between Title and Nav group */
-        width: auto !important; /* Don't stretch, let justify-content settle the rest */
+        gap: 8px !important;
+        /* Distance between Title and Nav group */
+        width: auto !important;
+        /* Don't stretch, let justify-content settle the rest */
         overflow: visible !important;
     }
 
     /* Main Container Flex restored to prevent wrapping */
     div:has(> div > #dept-view-title) {
         padding: 7px 7px !important;
-        gap: 8px !important; /* Proper distance between Nav and Print */
+        gap: 8px !important;
+        /* Proper distance between Nav and Print */
         display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
@@ -69,16 +74,18 @@
     /* Handled by margin-right: auto on #dept-view-title */
 
     /* 2. Nav Group (Buttons + Selects): Right of Title */
-    #dept-view-title + div {
+    #dept-view-title+div {
         display: flex !important;
         align-items: center !important;
-        gap: 2px !important; /* Tighter gap to save horizontal space */
+        gap: 2px !important;
+        /* Tighter gap to save horizontal space */
         margin-left: 0 !important;
         flex-shrink: 0 !important;
     }
 
     /* Nav Buttons Compact */
-    #btn-dept-prev, #btn-dept-next {
+    #btn-dept-prev,
+    #btn-dept-next {
         padding: 0 !important;
         width: 20px !important;
         height: 24px !important;
@@ -92,7 +99,8 @@
     }
 
     /* Dropdowns Compact */
-    #dept-nav-year, #dept-nav-month {
+    #dept-nav-year,
+    #dept-nav-month {
         padding: 0 2px !important;
         height: 24px !important;
         font-size: 0.8rem !important;
@@ -108,15 +116,18 @@
 
     #btn-admin {
         margin-left: 4px !important;
-        margin-right: 0 !important; /* Default: no extra margin */
+        margin-right: 0 !important;
+        /* Default: no extra margin */
     }
 
     /* Print Button: Icon-only on mobile */
-    #btn-dept-print .btn-text, #btn-list-print .btn-text {
+    #btn-dept-print .btn-text,
+    #btn-list-print .btn-text {
         display: none !important;
     }
 
-    #btn-dept-print, #btn-list-print {
+    #btn-dept-print,
+    #btn-list-print {
         padding: 0 !important;
         width: 32px !important;
         height: 32px !important;
@@ -138,12 +149,14 @@
     /* 3. Dept List View Optimization */
     #dept-view-content-wrapper {
         border-radius: 4px !important;
-        overflow-x: auto !important; /* Allow horizontal scroll */
+        overflow-x: auto !important;
+        /* Allow horizontal scroll */
         -webkit-overflow-scrolling: touch;
     }
 
     #dept-view-table {
-        min-width: 800px; /* Ensure table doesn't collapse too much */
+        min-width: 800px;
+        /* Ensure table doesn't collapse too much */
     }
 
     /* Sticky First Column (Date) */
@@ -152,14 +165,15 @@
         position: sticky !important;
         left: 0 !important;
         z-index: 25 !important;
-        background-color: #f9fafb !important; /* Match table background */
-        box-shadow: 2px 0 5px
-            rgba(0, 0, 0, 0.05); /* Subtle shadow to indicate scroll */
+        background-color: #f9fafb !important;
+        /* Match table background */
+        box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
+        /* Subtle shadow to indicate scroll */
     }
 
     #dept-view-table thead th:first-child {
-        z-index: 50
-            !important; /* Stay above body sticky cells AND other header cells */
+        z-index: 50 !important;
+        /* Stay above body sticky cells AND other header cells */
     }
 
     /* 4. FullCalendar Mobile Adjustments */
@@ -171,16 +185,21 @@
     }
 
     .fc-toolbar-title {
-        font-size: 1.0rem !important; /* Smaller title */
+        font-size: 1.0rem !important;
+        /* Smaller title */
     }
 
     .fc .fc-button {
         width: auto !important;
-        height: 24px !important; /* Increased back to 24px for alignment */
+        height: 24px !important;
+        /* Increased back to 24px for alignment */
         min-height: 0 !important;
-        padding: 0 4px !important; /* Keep compact padding */
-        font-size: 0.75rem !important; /* Keep text size */
-        line-height: 22px !important; /* Vertically center */
+        padding: 0 4px !important;
+        /* Keep compact padding */
+        font-size: 0.75rem !important;
+        /* Keep text size */
+        line-height: 22px !important;
+        /* Vertically center */
         display: inline-flex !important;
         align-items: center !important;
         justify-content: center !important;
@@ -203,7 +222,10 @@
     }
 
     /* 5. Modal & Admin Form Adjustments (Grid to Stack) */
-    .grid-cols-2, .grid-cols-3, .grid-cols-4, .grid-cols-12 {
+    .grid-cols-2,
+    .grid-cols-3,
+    .grid-cols-4,
+    .grid-cols-12 {
         grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
     }
 
@@ -212,7 +234,9 @@
         flex-direction: column !important;
     }
 
-    .md\:col-span-3, .md\:col-span-6, .md\:col-span-12 {
+    .md\:col-span-3,
+    .md\:col-span-6,
+    .md\:col-span-12 {
         grid-column: span 1 / span 1 !important;
     }
 
@@ -246,6 +270,7 @@
     #btn-print-modal .btn-text {
         display: none !important;
     }
+
     #btn-print-modal {
         padding: 0 !important;
         width: 32px !important;
@@ -256,6 +281,7 @@
 
     /* 7. Force 1-Column Print for List View (Mobile Mode) */
     @media print {
+
         /* Override Grid to Block/Single Col */
         .grid.grid-cols-2 {
             display: block !important;
@@ -267,11 +293,12 @@
         }
 
         /* Ensure columns stack */
-        .list-2weeks-print-grid > div {
+        .list-2weeks-print-grid>div {
             width: 100% !important;
             break-inside: auto !important;
             margin-bottom: 20px !important;
-            border-right: none !important; /* Remove separator */
+            border-right: none !important;
+            /* Remove separator */
         }
 
         /* Hide the 2nd header if simply stacking? 
