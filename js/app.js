@@ -736,13 +736,18 @@ const App = {
         // Clear existing view-specific actions
         headerActions.innerHTML = '';
 
-        // Check if current view has a calendar return button (e.g. #btn-dept-calendar)
+        // Check for Calendar Return Buttons
         const viewCalendarBtn = document.querySelector('#btn-dept-calendar, #btn-list-calendar');
         if (viewCalendarBtn) {
-            // Un-hide if it was hidden by some mobile-specific toggle logic
             viewCalendarBtn.style.display = 'flex';
-            // Move it to header
             headerActions.appendChild(viewCalendarBtn);
+        }
+
+        // Check for Print Buttons
+        const viewPrintBtn = document.querySelector('#btn-print-modal, #btn-dept-print, #btn-list-print');
+        if (viewPrintBtn) {
+            viewPrintBtn.style.display = 'flex';
+            headerActions.appendChild(viewPrintBtn);
         }
 
         // [FIX] Hide empty container explicitly to prevent double gaps
