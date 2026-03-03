@@ -803,9 +803,9 @@ const App = {
                 } else if (msg.includes('Failed to fetch') || msg.includes('Network request failed')) {
                     // Network specific handling for mobile/firewall issues
                     msg = '서버 접속에 실패했습니다. (Failed to fetch)\n' +
-                          '1. LTE/5G 데이터 대신 와이파이를 확인하거나,\n' +
-                          '2. 학교 와이파이인 경우 방화벽 문제일 수 있습니다.\n' +
-                          '3. 잠시 후 다시 시도해주세요.';
+                        '1. LTE/5G 데이터 대신 와이파이를 확인하거나,\n' +
+                        '2. 학교 와이파이인 경우 방화벽 문제일 수 있습니다.\n' +
+                        '3. 잠시 후 다시 시도해주세요.';
                 }
 
                 errorMsg.innerText = `로그인 실패: ${msg}`;
@@ -3363,10 +3363,10 @@ const App = {
                         const day = dateObj.getDay();
                         // 1. Weekend Check
                         if (day === 0 || day === 6) return;
-                        
+
                         // 2. Holiday Check (Check if any holiday exists on this date)
-                        const isHoliday = basicSchedules.some(h => 
-                            (h.type === 'holiday' || h.is_holiday) && 
+                        const isHoliday = basicSchedules.some(h =>
+                            (h.type === 'holiday' || h.is_holiday) &&
                             checkOverlap(h.start_date, h.end_date || h.start_date, dateStr)
                         );
                         if (isHoliday) return;
@@ -3607,7 +3607,7 @@ const App = {
 
         printContainer = document.createElement('div');
         printContainer.id = printContainerId;
-        printContainer.className = 'w-full h-full'; 
+        printContainer.className = 'w-full h-full';
         // Insert after main content
         document.body.appendChild(printContainer);
 
@@ -3636,7 +3636,7 @@ const App = {
         // [FIX] Update Print Header Range Text
         const printRange = document.getElementById('dept-print-range');
         if (printRange) {
-             printRange.textContent = `${this.formatLocal(finalStart)} ~ ${this.formatLocal(finalEnd)} `;
+            printRange.textContent = `${this.formatLocal(finalStart)} ~ ${this.formatLocal(finalEnd)} `;
         }
 
         // Balanced Pagination Logic
@@ -3667,7 +3667,7 @@ const App = {
 
         // Render Pages
         let htmlBuffer = '';
-        
+
         chunks.forEach((chunkDepts, pageIdx) => {
             if (pageIdx > 0) {
                 htmlBuffer += `<div class="print-page-break"></div>`;
@@ -3675,7 +3675,7 @@ const App = {
 
             // Page Header (Optional, if we want repeated headers per page)
             // The user requested split, usually this implies repeating the Date column + Subset of Depts
-            
+
             // Start Table
             htmlBuffer += `
                 <div class="print-page-wrapper" style="width: 100%; margin-bottom: 20px;">
@@ -3687,8 +3687,8 @@ const App = {
 
             // Dept Headers
             chunkDepts.forEach(d => {
-                 const color = d.dept_color || '#ccc';
-                 htmlBuffer += `
+                const color = d.dept_color || '#ccc';
+                htmlBuffer += `
                     <th class="col-dept" style="border: 1px solid #999; border-left: none; box-shadow: inset 0 -5px 0 ${color}; padding: 4px;">
                         ${d.dept_short || d.dept_name}
                     </th>
@@ -3728,23 +3728,23 @@ const App = {
                     // Filter events for this dept & date
                     const evts = schedules.filter(s => {
                         if (s.dept_id !== dept.id) return false;
-                        
+
                         // [FIX] Privacy Check for Print View - MATCHING SCREEN LOGIC
                         const role = this.state.role;
                         const isSuperOrAdmin = role === 'super_admin' || role === 'admin';
-                        
+
                         let isMyDept = false;
                         if (this.state.user && this.state.user.dept_id) {
                             if (String(this.state.user.dept_id) === String(dept.id)) isMyDept = true;
                         } else if (this.state.myDeptId) {
-                             if (String(this.state.myDeptId) === String(dept.id)) isMyDept = true;
+                            if (String(this.state.myDeptId) === String(dept.id)) isMyDept = true;
                         }
 
                         // 1. Dept Visibility
                         if (s.visibility === 'dept') {
                             if (!isSuperOrAdmin && !isMyDept) return false;
                         }
-                        
+
                         // 2. Private Visibility
                         if (s.visibility === 'private') {
                             const isCreator = this.state.user && s.user_id && String(s.user_id) === String(this.state.user.id);
@@ -3757,18 +3757,18 @@ const App = {
                     });
 
                     htmlBuffer += `<td class="col-dept" style="border: 1px solid #e5e7eb; border-top: none; border-left: none; padding: 4px; vertical-align: top;">`;
-                    
+
                     // [FIX] Inject Holiday Name for '교무기획부' (Teaching Affairs) - Same Font Size
                     if (holidayName && (dept.dept_name.includes('교무') || dept.dept_name.includes('Academic'))) {
-                         htmlBuffer += `<div class="dept-event-item" style="color: red; background-color: #fef2f2; font-size: 9px;">${holidayName}</div>`;
+                        htmlBuffer += `<div class="dept-event-item" style="color: red; background-color: #fef2f2; font-size: 9px;">${holidayName}</div>`;
                     }
 
                     evts.forEach(e => {
-                         let displayText = e.title;
-                         if (e.description) displayText += `(${e.description})`;
-                         const isMulti = (e.start_date !== e.end_date && e.end_date);
-                         const style = isMulti ? 'background-color: #f3f4f6; border-radius: 4px;' : '';
-                         htmlBuffer += `<div class="dept-event-item" style="${style}">${displayText}</div>`;
+                        let displayText = e.title;
+                        if (e.description) displayText += `(${e.description})`;
+                        const isMulti = (e.start_date !== e.end_date && e.end_date);
+                        const style = isMulti ? 'background-color: #f3f4f6; border-radius: 4px;' : '';
+                        htmlBuffer += `<div class="dept-event-item" style="${style}">${displayText}</div>`;
                     });
                     htmlBuffer += `</td>`;
                 });
@@ -3784,7 +3784,7 @@ const App = {
     },
 
     renderDeptListView: async function (customStart, customEnd) {
-    
+
         const thead = document.getElementById('dept-view-thead');
         const tbody = document.getElementById('dept-view-tbody');
         const selYear = document.getElementById('dept-nav-year');
@@ -3951,41 +3951,41 @@ const App = {
                 // 2. Inject Virtual Events
                 // Kyomu -> Holidays AND Basic Schedules (Terms, Exams, Vacations)
                 if (dept.dept_name.includes('교무')) {
-                   // A. Holidays
-                   if (holidayName) {
+                    // A. Holidays
+                    if (holidayName) {
                         if (!deptSchedules.some(s => s.title === holidayName)) {
                             deptSchedules.push({ title: holidayName, description: '' });
                         }
-                   }
-                   // B. Basic Schedules (Inject all types: term, exam, vacation, event)
-                   basicSchedules.forEach(bs => {
-                       // [FIX] Vacation: Do NOT show in Kyomu column
-                       if (bs.type === 'vacation') return;
+                    }
+                    // B. Basic Schedules (Inject all types: term, exam, vacation, event)
+                    basicSchedules.forEach(bs => {
+                        // [FIX] Vacation: Do NOT show in Kyomu column
+                        if (bs.type === 'vacation') return;
 
-                       // Check range overlap
-                       let bStart = bs.start_date;
-                       let bEnd = bs.end_date || bs.start_date;
-                       if (checkOverlap(bStart, bEnd, dateStr)) {
-                           // [FIX] Exam: Do NOT show on Weekends or Holidays
-                           if (bs.type === 'exam') {
-                               const day = curr.getDay();
-                               const isOff = (day === 0 || day === 6 || holidays[dateStr]);
-                               if (isOff) return;
-                           }
+                        // Check range overlap
+                        let bStart = bs.start_date;
+                        let bEnd = bs.end_date || bs.start_date;
+                        if (checkOverlap(bStart, bEnd, dateStr)) {
+                            // [FIX] Exam: Do NOT show on Weekends or Holidays
+                            if (bs.type === 'exam') {
+                                const day = curr.getDay();
+                                const isOff = (day === 0 || day === 6 || holidays[dateStr]);
+                                if (isOff) return;
+                            }
 
-                           // Deduplication logic
-                           // Check by title (s.title)
-                           // Note: basic schedules might share names with holidays, we allow duplicates if they are distinct entities or just merge?
-                           // User said "All basic schedules". 
-                           // Avoid adding if EXACT title already exists (e.g. holiday name match)
-                           if (!deptSchedules.some(s => s.title === bs.name)) {
-                                deptSchedules.push({ 
-                                    title: bs.name, 
-                                    description: bs.type === 'term' ? '개학' : (bs.type === 'exam' ? '고사' : '') 
+                            // Deduplication logic
+                            // Check by title (s.title)
+                            // Note: basic schedules might share names with holidays, we allow duplicates if they are distinct entities or just merge?
+                            // User said "All basic schedules". 
+                            // Avoid adding if EXACT title already exists (e.g. holiday name match)
+                            if (!deptSchedules.some(s => s.title === bs.name)) {
+                                deptSchedules.push({
+                                    title: bs.name,
+                                    description: bs.type === 'term' ? '개학' : (bs.type === 'exam' ? '고사' : '')
                                 });
-                           }
-                       }
-                   });
+                            }
+                        }
+                    });
                 }
 
                 // Science -> Env Events
@@ -4103,10 +4103,10 @@ const App = {
 
             // [CSAT] Detect College Scholastic Ability Test Date for D-Day
             this.state.csatDate = null;
-            
+
             // 1. Check Basic Schedules
             let csatItem = result.basic_schedules.find(s => s.name && s.name.includes('대학수학능력시험'));
-            
+
             // 2. Check Variable Holidays (JSON in settings) if not found
             if (!csatItem && result.variable_holidays) {
                 const vHolidays = result.variable_holidays;
@@ -4119,15 +4119,15 @@ const App = {
             if (csatItem) {
                 // [FIX] Prevent redundant logging
                 if (this.state.csatDate !== csatItem.start_date) {
-                     console.log("[CSAT] Found:", csatItem);
-                     this.state.csatDate = csatItem.start_date;
+                    console.log("[CSAT] Found:", csatItem);
+                    this.state.csatDate = csatItem.start_date;
                 }
             }
         }
 
         // [CACHE] Store result
         if (result.academic_year) {
-             this.state.cache.settings[result.academic_year] = result;
+            this.state.cache.settings[result.academic_year] = result;
         }
 
         return result;
@@ -4786,6 +4786,13 @@ const App = {
                 console.log("[Save] Starting save operation. isRecurring:", isRecurring, "scheduleId:", scheduleId);
                 console.log("[Save] Payload Preview:", batchData[0]);
 
+                // 1. [SECURITY/ROBUSTNESS] Explicitly check/refresh session before database operation
+                console.log("[Save] Validating session...");
+                const { data: { session }, error: authErr } = await window.SupabaseClient.supabase.auth.getSession();
+                if (authErr || !session) {
+                    throw new Error('인증 세션이 유효하지 않거나 만료되었습니다. 다시 로그인해 주세요.');
+                }
+
                 let result;
                 if (scheduleId) {
                     // UPDATE (Single)
@@ -4800,17 +4807,11 @@ const App = {
                     }
 
                     console.log("[Save] Executing Update...");
-                    const updatePromise = window.SupabaseClient.supabase
+                    result = await window.SupabaseClient.supabase
                         .from('schedules')
                         .update(updatePayload)
                         .eq('id', parseInt(scheduleId))
                         .select();
-
-                    const timeoutPromiseUpdate = new Promise((_, reject) =>
-                        setTimeout(() => reject(new Error('서버 응답 시간이 초과되었습니다. 네트워크 상태를 확인하거나 잠시 후 다시 시도해주세요.')), 15000)
-                    );
-
-                    result = await Promise.race([updatePromise, timeoutPromiseUpdate]);
                 } else {
                     // INSERT (Maybe Batch)
                     // [FIX] Sanitization for bigint dept_id
@@ -4824,17 +4825,10 @@ const App = {
                     });
 
                     console.log("[Save] Executing Insert with batch size:", sanitizedBatch.length);
-                    // [Safety] Add a race condition/timeout guard
-                    const savePromise = window.SupabaseClient.supabase
+                    result = await window.SupabaseClient.supabase
                         .from('schedules')
                         .insert(sanitizedBatch)
                         .select();
-
-                    const timeoutPromise = new Promise((_, reject) =>
-                        setTimeout(() => reject(new Error('서버 응답 시간이 초과되었습니다. 네트워크 상태를 확인하거나 잠시 후 다시 시도해주세요.')), 15000)
-                    );
-
-                    result = await Promise.race([savePromise, timeoutPromise]);
                 }
 
                 console.log("[Save] Supabase Response Received:", result);
@@ -4870,7 +4864,12 @@ const App = {
 
             } catch (err) {
                 console.error("Save Error:", err);
-                alert('저장 실패: ' + (err.message || '알 수 없는 오류'));
+                // Detect specific timeout or connection errors
+                let errMsg = err.message || '알 수 없는 오류';
+                if (errMsg.includes('timeout') || errMsg.includes('FetchError')) {
+                    errMsg = '서버 응답이 늦어지고 있습니다. 잠시 후 다시 시도하거나 네트워크 상태를 확인해 주세요.';
+                }
+                alert('저장 실패: ' + errMsg);
                 btnSave.disabled = false;
                 btnSave.textContent = '저장';
             }
@@ -5065,12 +5064,12 @@ const App = {
 
         // 2. Prepare View
         if (viewType === 'dept_list') {
-             // [FIX] Use Print-Specific Renderer for Balanced Pagination
-             if (customStart && customEnd) {
-                 await this.renderDeptListViewPrint(size, orient, customStart, customEnd);
-             } else {
-                 await this.renderDeptListViewPrint(size, orient);
-             }
+            // [FIX] Use Print-Specific Renderer for Balanced Pagination
+            if (customStart && customEnd) {
+                await this.renderDeptListViewPrint(size, orient, customStart, customEnd);
+            } else {
+                await this.renderDeptListViewPrint(size, orient);
+            }
         } else if (viewType === 'weekly_plan') {
             // Just render current month if no custom range but dept_list
             if (viewType === 'dept_list') await this.renderDeptListView();
@@ -6025,7 +6024,7 @@ const App = {
                     const ranges = [];
                     let curr = this.parseLocal(bs.start_date);
                     const end = this.parseLocal(bs.end_date || bs.start_date);
-                    
+
                     let rangeStart = null;
                     let lastValidDate = null;
 
@@ -6064,8 +6063,8 @@ const App = {
                             user_name: '',
                             visibility: 'public',
                             is_injected: true,
-                            extendedProps: { 
-                                isPrintable: true, 
+                            extendedProps: {
+                                isPrintable: true,
                                 description: bs.type_name || '학사일정',
                                 deptId: String(kyomuDept.id),
                                 deptInfo: kyomuDept
@@ -6085,8 +6084,8 @@ const App = {
                         user_name: '',
                         visibility: 'public',
                         is_injected: true,
-                        extendedProps: { 
-                            isPrintable: true, 
+                        extendedProps: {
+                            isPrintable: true,
                             description: bs.type_name || '학사일정',
                             deptId: String(kyomuDept.id),
                             deptInfo: kyomuDept
@@ -6663,9 +6662,9 @@ const App = {
     },
 
     // [NEW] Robust Logout Handler
-    handleLogout: async function(options = { confirm: true }) {
+    handleLogout: async function (options = { confirm: true }) {
         if (options.confirm && !confirm('로그아웃 하시겠습니까?')) return;
-        
+
         const btn = document.getElementById('btn-logout');
         if (btn) {
             btn.disabled = true;
@@ -6686,8 +6685,8 @@ const App = {
         // 2. Force Cleanup immediately
         console.log("[Logout] Cleaning up local state...");
         this.clearCache();
-        sessionStorage.clear(); 
-        
+        sessionStorage.clear();
+
         // [SECURITY] Clear Supabase tokens to prevent zombie login (Auto-relogin on reload)
         // Supabase uses localStorage with keys starting with 'sb-'
         Object.keys(localStorage).forEach(key => {
@@ -6697,21 +6696,21 @@ const App = {
         });
 
         // 3. Hard Reload
-        window.location.reload(); 
+        window.location.reload();
     },
 
     // [NEW] Idle Timer (Auto Logout)
-    initIdleTimer: function() {
+    initIdleTimer: function () {
         const IDLE_TIMEOUT = 60 * 60 * 1000; // 1 Hour
         const THROTTLE_DELAY = 60 * 1000;    // 1 Minute (Check activity max once per min)
         let idleTimer;
         let lastActivity = Date.now();
-        
+
         const resetTimer = () => {
             const now = Date.now();
             // Optimization: Only reset if enough time has passed since last reset
             if (now - lastActivity < THROTTLE_DELAY) return;
-            
+
             lastActivity = now;
             if (idleTimer) clearTimeout(idleTimer);
 
@@ -6731,7 +6730,7 @@ const App = {
         // Optimization: Scroll event can be very frequent, throttle takes care of it but better to limit listener?
         // Throttling inside handler is sufficient.
         document.onscroll = resetTimer;
-        
+
         console.log("[Auto-Logout] Timer initialized (60min) with 1min throttling.");
         resetTimer(); // Start immediately
     },
