@@ -4708,6 +4708,7 @@ const App = {
         form.onsubmit = async (e) => {
             e.preventDefault();
 
+            try {
             const scheduleId = document.getElementById('schedule-id').value;
             const selectedDeptOption = deptSelect.options[deptSelect.selectedIndex];
             const deptName = selectedDeptOption ? selectedDeptOption.text : '';
@@ -4782,7 +4783,6 @@ const App = {
                 });
             }
 
-            try {
                 console.log("[Save] Starting save operation. isRecurring:", isRecurring, "scheduleId:", scheduleId);
                 console.log("[Save] Payload Preview:", batchData[0]);
 
