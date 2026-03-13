@@ -4183,7 +4183,9 @@ const App = {
 
     fetchSchedules: async function () {
         // Fetch all public schedules + visible internal ones
-        let query = window.SupabaseClient.supabase.from('schedules').select('*');
+        // [BUGFIX] Added explicit limit(10000) to prevent Supabase/PostgREST from silently truncating 
+        // results to 1000 rows, which would cause newly saved schedules to randomly disappear from UI.
+        let query = window.SupabaseClient.supabase.from('schedules').select('*').limit(10000);
 
         // Guest visibility filter
         if (!this.state.user) {
@@ -5950,7 +5952,7 @@ const App = {
         const needsSchedules = !this.state.cache.schedules;
 
         const promises = [];
-        if (missingAYs.length > 0) promises.push(window.SupabaseClient.supabase.from('basic_schedules').select('*').in('academic_year', missingAYs));
+        if (missingAYs.length > 0) promises.push(window.SupabaseClient.supabase.from('basic_schedules').select('*').in('academic_year', missingAYs).limit(5000));
         else promises.push(Promise.resolve({ data: [] }));
 
         if (needsDepts) promises.push(window.SupabaseClient.supabase.from('departments').select('*').order('sort_order', { ascending: true }));
