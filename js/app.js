@@ -290,7 +290,7 @@ const App = {
     },
 
     refreshCurrentView: function () {
-        // [NUCLEAR OPTION] Full Reload with State
+        // [SOFT REFRESH] Update without full page reload
         // Save state
         const v = this.state.viewMode || 'calendar';
         let d = new Date();
@@ -303,13 +303,17 @@ const App = {
             } else if (this.state.initialDate) {
                 d = new Date(this.state.initialDate);
             }
-        } catch (e) { }
+        } catch (e) { console.warn("Date capture failed during refresh:", e); }
 
-        sessionStorage.setItem('pogok_reload_date', d.toISOString());
-        sessionStorage.setItem('pogok_reload_view', v);
+        // Clear schedules cache so it fetches fresh data
+        this.state.cache.schedules = null;
+        console.log(`[Refresh] Soft refreshing view: ${v}`);
 
-        // Force Reload
-        window.location.reload();
+        if (v === 'calendar' && this.state.calendar) {
+            this.state.calendar.refetchEvents();
+        } else {
+            this.loadView(v);
+        }
     },
 
     checkAuth: async function () {
@@ -3332,7 +3336,7 @@ const App = {
                 // [STRICT PRIVATE CHECK]
                 if (s.visibility === 'private') {
                     const isAdmin = this.state.role === 'admin';
-                    const isCreator = this.state.user && s.user_id && String(s.user_id) === String(this.state.user.id);
+                    const isCreator = this.state.user && s.author_id && String(s.author_id) === String(this.state.user.id);
                     if (!isAdmin && !isCreator) return false;
                 }
 
@@ -3747,7 +3751,7 @@ const App = {
 
                         // 2. Private Visibility
                         if (s.visibility === 'private') {
-                            const isCreator = this.state.user && s.user_id && String(s.user_id) === String(this.state.user.id);
+                            const isCreator = this.state.user && s.author_id && String(s.author_id) === String(this.state.user.id);
                             if (!isSuperOrAdmin && !isCreator) return false;
                         }
 
@@ -3919,7 +3923,7 @@ const App = {
                     // [FORCE MATCH - AUTHOR]
                     // If I created this schedule, and this column IS my dept column, force show it here.
                     // This handles cases where ID changed and Name has typo/mismatch.
-                    const isAuthor = this.state.user && s.user_id && String(s.user_id) === String(this.state.user.id);
+                    const isAuthor = this.state.user && s.author_id && String(s.author_id) === String(this.state.user.id);
                     const forceMatch = isColMyDept && isAuthor;
 
                     const isMatch = matchById || matchByName || forceMatch;
@@ -3939,7 +3943,7 @@ const App = {
                     if (!this.state.user && s.visibility !== 'public') return false;
                     if (s.visibility === 'private') {
                         const isAdmin = this.state.role === 'admin';
-                        const isCreator = this.state.user && s.user_id && String(s.user_id) === String(this.state.user.id);
+                        const isCreator = this.state.user && s.author_id && String(s.author_id) === String(this.state.user.id);
                         if (!isAdmin && !isCreator) return false;
                     }
 
@@ -4417,8 +4421,8 @@ const App = {
                 // If visibility is 'private', only Admin or Creator can see it.
                 if (s.visibility === 'private') {
                     const isAdmin = this.state.role === 'admin';
-                    // We assume s.user_id is available from the fetch
-                    const isCreator = this.state.user && s.user_id && String(s.user_id) === String(this.state.user.id);
+                    // We assume s.author_id is available from the fetch
+                    const isCreator = this.state.user && s.author_id && String(s.author_id) === String(this.state.user.id);
                     if (!isAdmin && !isCreator) return;
                 }
 
@@ -4642,6 +4646,9 @@ const App = {
                 includeHolidaysWrapper.classList.remove('hidden');
             }
 
+            // [BUGFIX] Explicitly clear schedule-id to prevent overwriting previous saves
+            document.getElementById('schedule-id').value = '';
+
             includeHolidaysCheck.checked = false; // Default: unchecked
             if (defaultDate) {
                 startInput.value = defaultDate;
@@ -4815,7 +4822,11 @@ const App = {
                         const copy = { ...d };
                         if (copy.dept_id === "") copy.dept_id = null;
                         if (copy.dept_id !== undefined && copy.dept_id !== null) {
-                            copy.dept_id = parseInt(copy.dept_id);
+                            if (isNaN(parseInt(copy.dept_id))) {
+                                copy.dept_id = null;
+                            } else {
+                                copy.dept_id = parseInt(copy.dept_id);
+                            }
                         }
                         return copy;
                     });
