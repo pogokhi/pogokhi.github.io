@@ -310,7 +310,7 @@ const App = {
         console.log(`[Refresh] Soft refreshing view: ${v}`);
 
         if (v === 'calendar' && this.state.calendar) {
-            this.state.calendar.refetchEvents();
+            this.refreshCalendarData(); // [FIX] Call the actual custom data fetching pipeline instead of non-functional refetchEvents
         } else {
             this.loadView(v);
         }
