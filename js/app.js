@@ -4718,7 +4718,16 @@ const App = {
             e.preventDefault();
 
             try {
-            const scheduleId = document.getElementById('schedule-id').value;
+                // [CRITICAL FIX] Check session validity before saving to prevent infinite hang
+                // If the token expired in a background tab, this will catch it before sending the update request.
+                const { data: { session }, error: sessionError } = await window.SupabaseClient.supabase.auth.getSession();
+                if (sessionError || !session) {
+                    alert('로그인 세션이 만료되었습니다. 다시 로그인해 주세요.');
+                    window.location.reload();
+                    return;
+                }
+
+                const scheduleId = document.getElementById('schedule-id').value;
             const selectedDeptOption = deptSelect.options[deptSelect.selectedIndex];
             const deptName = selectedDeptOption ? selectedDeptOption.text : '';
 
