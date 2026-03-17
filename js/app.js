@@ -158,6 +158,48 @@ const App = {
             // [RESTORE STATE] Check if we just reloaded
             const savedDate = sessionStorage.getItem('pogok_reload_date');
             const savedView = sessionStorage.getItem('pogok_reload_view');
+            // Check if savedView is valid before attempting to navigate
+            if (savedView && this.state.templates[savedView] !== undefined) {
+                // Clear the reload flag right away to prevent infinite loops if something goes wrong during navigate
+                sessionStorage.removeItem('pogok_reload_view');
+                sessionStorage.removeItem('pogok_reload_date');
+                // Navigate first
+                this.navigate(savedView);
+                // Then set date on calendar later if needed
+            } else {
+                 if(this.state.viewMode !== 'login' && this.state.viewMode !== 'pending') {
+                     // Initial Route based on role
+                     this.navigate('calendar');
+                 }
+            }
+
+            // [CRITICAL UX FIX] Handle Tab Background Disconnection (Sleep Mode)
+            // If the user leaves the tab for >1 hour, the Supabase token expires silently.
+            // When they return (visibilitychange), we forcefully check the session.
+            // If it's dead, we reload the page to snap the UI back to a clean "Login" state.
+            document.addEventListener('visibilitychange', async () => {
+                if (document.visibilityState === 'visible') {
+                    // Only check if we think we are logged in.
+                    if (this.state.user) {
+                        try {
+                            const { data: { session }, error } = await window.SupabaseClient.supabase.auth.getSession();
+                            // If there is no session returned, it expired while the tab was hidden.
+                            if (error || !session) {
+                                console.warn("[Auth] Session expired in background. Forcing reload to reset UI.");
+                                window.location.reload();
+                            }
+                        } catch (e) {
+                            console.error("[Auth] Background session check failed", e);
+                        }
+                    }
+                }
+            });
+
+        } catch (error) {
+            console.error("Initialization Error:", error);
+            // ... (handle visual error if needed)
+        }
+    },
             if (savedDate) {
                 this.state.initialDate = new Date(savedDate);
                 sessionStorage.removeItem('pogok_reload_date'); // Consume
