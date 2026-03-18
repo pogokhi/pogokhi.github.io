@@ -155,24 +155,6 @@ const App = {
             // 3. Check Auth State (Now with correct currentYear)
             await this.checkAuth();
 
-            // [RESTORE STATE] Check if we just reloaded
-            const savedDate = sessionStorage.getItem('pogok_reload_date');
-            const savedView = sessionStorage.getItem('pogok_reload_view');
-            // Check if savedView is valid before attempting to navigate
-            if (savedView && this.state.templates[savedView] !== undefined) {
-                // Clear the reload flag right away to prevent infinite loops if something goes wrong during navigate
-                sessionStorage.removeItem('pogok_reload_view');
-                sessionStorage.removeItem('pogok_reload_date');
-                // Navigate first
-                this.navigate(savedView);
-                // Then set date on calendar later if needed
-            } else {
-                 if(this.state.viewMode !== 'login' && this.state.viewMode !== 'pending') {
-                     // Initial Route based on role
-                     this.navigate('calendar');
-                 }
-            }
-
             // [CRITICAL UX FIX] Handle Tab Background Disconnection (Sleep Mode)
             // If the user leaves the tab for >1 hour, the Supabase token expires silently.
             // When they return (visibilitychange), we forcefully check the session.
@@ -194,22 +176,6 @@ const App = {
                     }
                 }
             });
-
-        } catch (error) {
-            console.error("Initialization Error:", error);
-            // ... (handle visual error if needed)
-        }
-    },
-            if (savedDate) {
-                this.state.initialDate = new Date(savedDate);
-                sessionStorage.removeItem('pogok_reload_date'); // Consume
-                console.log("[Init] Restored Date:", this.state.initialDate);
-            }
-            if (savedView) {
-                // If view logic supports explicit initial view, we can use it, 
-                // but usually URL hash or default handles it.
-                // We just rely on state here.
-            }
 
             // [FIX] Event Delegation for Logout Button (Robustness)
             const authContainer = document.getElementById('header-auth-btn');
@@ -237,8 +203,22 @@ const App = {
             });
 
             // 5. Load Initial View
+            // [RESTORE STATE] Check if we just reloaded due to session expiration
+            const savedDate = sessionStorage.getItem('pogok_reload_date');
+            const savedView = sessionStorage.getItem('pogok_reload_view');
+            
+            if (savedDate) {
+                this.state.initialDate = new Date(savedDate);
+                sessionStorage.removeItem('pogok_reload_date');
+                console.log("[Init] Restored Date:", this.state.initialDate);
+            }
+
             let initialView = 'calendar';
-            if (window.location.hash) {
+            if (savedView && ['calendar', 'login', 'admin', 'dept_list', 'list'].includes(savedView)) {
+                initialView = savedView;
+                sessionStorage.removeItem('pogok_reload_view');
+                console.log("[Init] Restored View:", initialView);
+            } else if (window.location.hash) {
                 const hashView = window.location.hash.substring(1);
                 if (['calendar', 'login', 'admin', 'dept_list', 'list'].includes(hashView)) {
                     initialView = hashView;
