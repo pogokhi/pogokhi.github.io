@@ -4204,20 +4204,44 @@ const App = {
     },
 
     fetchSchedules: async function () {
-        // Fetch all public schedules + visible internal ones
-        // [BUGFIX] Added explicit limit(10000) to prevent Supabase/PostgREST from silently truncating 
+        // Fetch all schedules page-by-page to prevent Supabase/PostgREST from silently truncating
         // results to 1000 rows, which would cause newly saved schedules to randomly disappear from UI.
-        let query = window.SupabaseClient.supabase.from('schedules').select('*').limit(10000);
+        let allData = [];
+        let page = 0;
+        const pageSize = 1000;
+        let hasMore = true;
 
-        // Guest visibility filter
-        if (!this.state.user) {
-            query = query.eq('visibility', 'public');
+        while (hasMore) {
+            let query = window.SupabaseClient.supabase
+                .from('schedules')
+                .select('*')
+                .range(page * pageSize, (page + 1) * pageSize - 1);
+
+            // Guest visibility filter
+            if (!this.state.user) {
+                query = query.eq('visibility', 'public');
+            }
+
+            const { data, error } = await query;
+
+            if (error) {
+                console.error('Error fetching schedules:', error);
+                break;
+            }
+
+            if (data && data.length > 0) {
+                allData.push(...data);
+                if (data.length < pageSize) {
+                    hasMore = false;
+                } else {
+                    page++;
+                }
+            } else {
+                hasMore = false;
+            }
         }
 
-        const { data, error } = await query;
-
-        if (error) console.error('Error fetching schedules:', error);
-        return data || [];
+        return allData;
     },
 
     // --- Data Transformation ---
@@ -4835,6 +4859,7 @@ const App = {
                     const updatePayload = { ...batchData[0] };
                     delete updatePayload.id; // Safety: never update unique ID
                     delete updatePayload.created_at; // Safety
+                    delete updatePayload.author_id; // Safety: do not change original author
 
                     // [FIX] Convert empty dept_id to null for bigint compatibility
                     if (updatePayload.dept_id === "") updatePayload.dept_id = null;
